@@ -1,0 +1,60 @@
+/* src/styles/components/StepItem.css */
+.step-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.step-status-button {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.step-complete-icon {
+  color: #22c55e;
+}
+
+.step-pending-icon {
+  color: #64748b;
+}
+
+.step-description-input {
+  flex-grow: 1;
+  border: none;
+  padding: 0;
+  font-size: 0.875rem;
+  background: transparent;
+}
+
+.step-description-input:focus {
+  outline: none;
+  box-shadow: none;
+}
+
+.step-complete {
+  text-decoration: line-through;
+  color: #94a3b8;
+}
+
+.step-remove-button {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.step-remove-icon {
+  color: #cbd5e1;
+}
+
+.step-remove-button:hover .step-remove-icon {
+  color: #ef4444;
+}

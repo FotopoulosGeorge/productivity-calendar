@@ -1,0 +1,288 @@
+/* src/styles/components/TaskItem.css */
+.task-item {
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  padding: 0.75rem;
+  background-color: white;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  transition: box-shadow 0.2s;
+}
+
+.task-item:hover {
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+}
+
+.task-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  cursor: pointer;
+  gap: 0.5rem;
+}
+
+.task-title-input {
+  font-weight: 500;
+  flex-grow: 1;
+  border: none;
+  padding: 0;
+  background: transparent;
+  font-size: 0.9375rem;
+  width: 100%; 
+  min-width: 0; 
+  max-width: 180px; 
+  overflow: visible; 
+  text-overflow: ellipsis; 
+  word-wrap: break-word; 
+  white-space: pre-wrap; 
+}
+
+.task-title-input:focus {
+  outline: none;
+  box-shadow: none;
+}
+
+.task-progress {
+  font-size: 0.75rem;
+  color: #64748b;
+  white-space: nowrap; 
+  flex-shrink: 0; 
+}
+
+.task-details {
+  margin-top: 0.75rem;
+  border-top: 1px solid #f1f5f9;
+  padding-top: 0.75rem;
+  max-width: 100%; 
+  overflow: hidden; 
+  max-height: 300px; 
+  overflow-y: auto; 
+}
+
+.steps-container {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.step-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.step-status-button {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.step-complete-icon {
+  color: #22c55e;
+}
+
+.step-pending-icon {
+  color: #64748b;
+}
+
+.step-description-input {
+  flex-grow: 1;
+  border: none;
+  padding: 0;
+  font-size: 0.875rem;
+  background: transparent;
+  word-wrap: break-word;
+  max-width: 150px; /* Limit width*/
+}
+
+.step-description-input:focus {
+  outline: none;
+  box-shadow: none;
+}
+
+.step-complete {
+  text-decoration: line-through;
+  color: #94a3b8;
+}
+
+.step-remove-button {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.step-remove-icon {
+  color: #cbd5e1;
+}
+
+.step-remove-button:hover .step-remove-icon {
+  color: #ef4444;
+}
+
+.add-step-button {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 0.75rem;
+  color: #3b82f6;
+  cursor: pointer;
+  margin-bottom: 0.75rem;
+}
+
+.add-step-button:hover {
+  color: #1d4ed8;
+}
+
+.reflection-container {
+  margin-top: 0.75rem;
+}
+
+.reflection-header {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.875rem;
+  color: #475569;
+  margin-bottom: 0.375rem;
+}
+
+.reflection-icon {
+  width: 14px;
+  height: 14px;
+}
+
+.reflection-textarea {
+  width: 100%;
+  min-height: 60px;
+  font-size: 0.875rem;
+  padding: 0.5rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  resize: vertical;
+}
+
+.reflection-textarea:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+}
+
+.task-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 0.75rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid #f1f5f9;
+}
+
+.task-delete-button {
+  padding: 0.25rem 0.5rem;
+  font-size: 0.75rem;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  background-color: #fee2e2;
+  color: #ef4444;
+}
+
+.task-delete-button:hover {
+  background-color: #fecaca;
+}
+
+.task-move-container {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.task-move-label {
+  font-size: 0.75rem;
+  color: #64748b;
+}
+
+.task-move-select {
+  padding: 0.25rem 0.5rem;
+  font-size: 0.75rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  background-color: #f8fafc;
+  color: #334155;
+  cursor: pointer;
+}
+
+.task-move-select:hover {
+  background-color: #f1f5f9;
+}
+
+.task-move-select:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+}
+
+.task-move-select {
+  padding: 0.25rem 0.5rem;
+  font-size: 0.75rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  background-color: #f8fafc;
+  color: #334155;
+  cursor: pointer;
+  min-width: 150px; 
+}
+
+.task-move-select:hover {
+  background-color: #f1f5f9;
+}
+
+.task-move-select:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+}
+
+.task-move-select optgroup {
+  font-weight: bold;
+  color: #475569;
+  font-size: 0.75rem;
+}
+
+.task-move-select option {
+  font-weight: normal;
+  color: #334155;
+  padding: 0.25rem;
+}
+
+/* Add this new class to TaskItem.css */
+.task-title-textarea {
+  font-weight: 500;
+  flex-grow: 1;
+  border: none;
+  padding: 0;
+  background: transparent;
+  font-size: 0.9375rem;
+  width: 100%;
+  min-width: 0;
+  word-wrap: break-word;
+  resize: none;
+
+  font-family: inherit;
+  line-height: 1.4;
+  min-height: 1.5rem;
+  max-height: none; 
+}
+
+.task-title-textarea:focus {
+  outline: none;
+  box-shadow: none;
+
+}
