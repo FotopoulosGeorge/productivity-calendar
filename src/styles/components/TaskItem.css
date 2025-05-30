@@ -110,7 +110,7 @@
 }
 
 .step-remove-button {
-  background: #fee2e2; /* Light red background */
+  background: #360b0b !important; 
   border: 1px solid #fecaca;
   padding: 0.25rem;
   cursor: pointer;
@@ -124,9 +124,9 @@
 }
 
 .step-remove-icon {
-  color: #ef4444; /* Bright red */
-  width: 14px;
-  height: 14px;
+  color: #ef4444 !important; /* Bright red */
+  width: 14px !important;
+  height: 14px !important;
 }
 
 .step-remove-button:hover {
