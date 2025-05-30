@@ -1,5 +1,5 @@
 // electron/main.js
-const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, Menu } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
@@ -24,20 +24,21 @@ function createWindow() {
     title: 'Productivity Calendar',
   });
 
-  // In production, load the built app
-  // In development, always load from the development server
+  // Check if we're in development or production
   const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
-  const startUrl = isDev 
-    ? 'http://localhost:3000' 
-    : `file://${path.join(__dirname, '../build/index.html')}`;
   
-  console.log('Loading URL:', startUrl);
-  mainWindow.loadURL(startUrl);
-
-  // Open DevTools in development mode
   if (isDev) {
+    // In development, load from localhost
+    mainWindow.loadURL('http://localhost:3000');
     mainWindow.webContents.openDevTools();
+  } else {
+    // In production, load the built app
+    mainWindow.loadFile(path.join(__dirname, '../build/index.html'));
   }
+
+  mainWindow.on('closed', () => {
+    mainWindow = null;
+  });
 
   // Set up menu
   setupAppMenu();
@@ -100,8 +101,6 @@ ipcMain.handle('import-data', async (event) => {
 
 // Setup application menu
 function setupAppMenu() {
-  const { Menu } = require('electron');
-  
   const template = [
     {
       label: 'File',
