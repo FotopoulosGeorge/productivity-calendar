@@ -169,7 +169,7 @@ const renderWeekView = () => {
   
   return (
     <div className="week-view">
-      <WeeklyBanner progress={weeklyProgress} />
+      <WeeklyBanner progress={weeklyProgress} tasks={tasks}/>
       <div className="days-grid">
         {daysOfWeek.map((date, index) => {
           const dateKey = formatDateKey(date);
