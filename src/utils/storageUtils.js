@@ -2,6 +2,38 @@
 
 const STORAGE_KEY = 'productivity-calendar-data';
 
+// Generate unique ID for tasks
+const generateTaskId = () => {
+  return `task_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+};
+
+// Migrate old data format to include task IDs
+const migrateData = (data) => {
+  if (!data) return data;
+  
+  let migrationNeeded = false;
+  const migratedData = {};
+  
+  Object.keys(data).forEach(dateKey => {
+    migratedData[dateKey] = data[dateKey].map(task => {
+      if (!task.id) {
+        migrationNeeded = true;
+        return {
+          ...task,
+          id: generateTaskId()
+        };
+      }
+      return task;
+    });
+  });
+  
+  if (migrationNeeded) {
+    console.log('Migrated tasks to include unique IDs');
+  }
+  
+  return migratedData;
+};
+
 /**
  * Loads task data from local storage
  * @returns {Object|null} The stored task data or null if not found
@@ -10,7 +42,9 @@ export const loadData = () => {
   try {
     const data = localStorage.getItem(STORAGE_KEY);
     if (data) {
-      return JSON.parse(data);
+      const parsedData = JSON.parse(data);
+      // Ensure all tasks have IDs
+      return migrateData(parsedData);
     }
     return null;
   } catch (error) {
@@ -73,7 +107,9 @@ export const importData = (file) => {
     reader.onload = (event) => {
       try {
         const data = JSON.parse(event.target.result);
-        saveData(data);
+        // Migrate imported data to ensure IDs
+        const migratedData = migrateData(data);
+        saveData(migratedData);
         resolve(true);
       } catch (error) {
         console.error('Error parsing import file:', error);

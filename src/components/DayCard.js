@@ -38,7 +38,7 @@ const DayCard = ({ date, tasks, onTaskUpdate, onAddTask, onDeleteTask, onMoveTas
     <div className="tasks-container">
       {tasks.map((task, taskIndex) => (
         <TaskItem 
-          key={taskIndex} 
+          key={task.id || `task-${taskIndex}-${date.getTime()}`} 
           task={task} 
           onUpdate={(updatedTask) => onTaskUpdate(taskIndex, updatedTask)} 
           onDeleteTask={() => onDeleteTask(taskIndex)}

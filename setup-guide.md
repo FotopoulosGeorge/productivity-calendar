@@ -46,6 +46,7 @@ The application is organized into multiple files for maintainability:
 
 - **src/** - React application source
   - `App.js` - Main application component
+  - `index.js`
   - **components/** - UI components
     - `WeeklyBanner.js` - Top banner showing weekly progress
     - `DayCard.js` - Card component for each day
@@ -54,6 +55,7 @@ The application is organized into multiple files for maintainability:
   - **utils/** - Utility functions
     - `dateUtils.js` - Date manipulation functions
     - `storageUtils.js` - Local storage functions
+    - `taskUtils.js` - Creates Unique ID for tasks
   - **styles/** - CSS files
 
 ## Features
