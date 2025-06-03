@@ -53,9 +53,9 @@
   border-top: 1px solid #f1f5f9;
   padding-top: 0.75rem;
   max-width: 100%; 
-  overflow: hidden; 
   max-height: 300px; 
   overflow-y: auto; 
+  overflow-x: visible;
 }
 
 .steps-container {
@@ -63,12 +63,15 @@
   flex-direction: column;
   gap: 0.5rem;
   margin-bottom: 0.75rem;
+  width: 100%;
 }
 
 .step-row {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  width: 100%;
+  padding-right: 30px;
 }
 
 .step-status-button {
@@ -91,12 +94,14 @@
 
 .step-description-input {
   flex-grow: 1;
+  flex-shrink: 1;
   border: none;
   padding: 0;
   font-size: 0.875rem;
   background: transparent;
   word-wrap: break-word;
-  max-width: 150px; /* Limit width*/
+  min-width: 0;
+  max-width: none; /* Limit width*/
 }
 
 .step-description-input:focus {
@@ -109,33 +114,36 @@
   color: #94a3b8;
 }
 
-.step-remove-button {
-  background: #360b0b !important; 
-  border: 1px solid #fecaca;
-  padding: 0.25rem;
-  cursor: pointer;
+.task-details .step-remove-button {
+  flex-shrink: 0;
+  background-color: transparent;
+  border: none;
+  padding: 4px;
+  border-radius: 50%;
+  width: 18px;
+  height: 18px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 4px;
-  width: 24px;
-  height: 24px;
-  transition: all 0.2s;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  opacity: 0;
+  margin-left: auto;
 }
 
-.step-remove-icon {
-  color: #ef4444 !important; /* Bright red */
+.task-details .step-remove-icon {
+  color: #ef4444 !important; 
   width: 14px !important;
   height: 14px !important;
 }
 
-.step-remove-button:hover {
-  background-color: #fca5a5;
-  border-color: #ef4444;
+.task-details .step-remove-button:hover {
+  background-color: #fee2e2;
+  opacity: 1;
 }
 
-.step-remove-button:hover .step-remove-icon {
-  color: #dc2626; /* Darker red on hover */
+.task-details .step-remove-button:hover .step-remove-icon {
+  color: #dc2626 !important; 
 }
 
 .add-step-button {
@@ -273,7 +281,6 @@
   padding: 0.25rem;
 }
 
-/* Add this new class to TaskItem.css */
 .task-title-textarea {
   font-weight: 500;
   flex-grow: 1;
