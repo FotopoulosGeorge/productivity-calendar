@@ -43,18 +43,20 @@
       "main": "electron/main.js"
     },
     "directories": {
-      "buildResources": "public"
+      "buildResources": "icons"
     },
     "mac": {
       "category": "public.app-category.productivity"
     },
     "win": {
       "target": "nsis",
+      "icon": "icons/icon.ico",
       "verifyUpdateCodeSignature": false,
       "signAndEditExecutable": false
     },
     "linux": {
-      "target": "AppImage"
+      "target": "AppImage",
+      "icon": "icons/icon.png"
     }
   },
   "eslintConfig": {
