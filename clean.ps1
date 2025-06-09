@@ -55,3 +55,8 @@ foreach ($Path in $PathsToClean) {
 }
 
 Write-Host "Clean completed!"
+
+Write-Host "Clearing icon cache..."
+ie4uinit.exe -ClearIconCache
+taskkill /IM explorer.exe /F
+Start-Process explorer.exe

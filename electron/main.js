@@ -11,11 +11,18 @@ if (require('electron-squirrel-startup')) {
 let mainWindow;
 
 function createWindow() {
+  if (process.platform === 'win32') {
+  app.setAppUserModelId('com.yourname.productivitycalendar');
+  }
+    // Determine the correct icon path
+  const iconPath = app.isPackaged 
+    ? path.join(process.resourcesPath, 'icons', 'icon.ico')  // Production
+    : path.join(__dirname, '../icons/icon.ico');            // Development
   // Create the browser window
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
-    icon: path.join(__dirname, '../icons/icon.png'),
+    icon: iconPath,
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
@@ -24,7 +31,12 @@ function createWindow() {
     //icon: path.join(__dirname, '../public/favicon.ico'),//
     title: 'Productivity Calendar',
   });
-
+  mainWindow.once('ready-to-show', () => {
+    mainWindow.show();
+    if (process.platform === 'win32') {
+      mainWindow.setIcon(iconPath);
+    }
+  });
   // Check if we're in development or production
   const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
   

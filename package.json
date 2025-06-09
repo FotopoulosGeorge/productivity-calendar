@@ -37,8 +37,25 @@
     "files": [
       "build/**/*",
       "electron/**/*",
-      "node_modules/**/*"
+      "node_modules/**/*",
+      "icons/**/*"
     ],
+    "extraResources": 
+    {
+      "from": "icons",
+      "to": "icons"
+    }
+    ,
+    "nsis": {             
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "installerIcon": "icons/icon.ico",
+      "uninstallerIcon": "icons/icon.ico", 
+      "installerHeaderIcon": "icons/icon.ico",
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Productivity Calendar"
+    },
     "extraMetadata": {
       "main": "electron/main.js"
     },

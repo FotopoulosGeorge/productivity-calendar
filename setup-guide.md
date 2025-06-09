@@ -58,6 +58,7 @@ The application is organized into multiple files for maintainability:
     - `storageUtils.js` - Local storage functions
     - `taskUtils.js` - Creates Unique ID for tasks
   - **styles/** - CSS files
+  - **icons/** - Icon files
 
 ## Features
 
