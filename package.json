@@ -50,7 +50,7 @@
     },
     "win": {
       "target": "nsis",
-      "icon": "icons/icon.ico",
+      "icon": "icons/appstore.png",
       "verifyUpdateCodeSignature": false,
       "signAndEditExecutable": false
     },
