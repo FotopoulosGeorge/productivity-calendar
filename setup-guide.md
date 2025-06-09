@@ -43,6 +43,7 @@ The application is organized into multiple files for maintainability:
 - **electron/** - Contains Electron-specific code
   - `main.js` - Main Electron process
   - `preload.js` - Preload script for secure IPC communication
+  - `clean.ps1` - Ensures clean build for updates
 
 - **src/** - React application source
   - `App.js` - Main application component
