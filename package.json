@@ -4,20 +4,22 @@
   "description": "A desktop productivity calendar application",
   "main": "electron/main.js",
   "homepage": "./",
-  "author": "Your Name",
+  "author": " Fotopoulos George",
   "license": "MIT",
   "private": true,
   "dependencies": {
     "electron-squirrel-startup": "^1.0.0",
+    "lucide-react": "^0.263.1",
     "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "lucide-react": "^0.263.1"
+    "react-dom": "^18.2.0"
   },
   "devDependencies": {
     "concurrently": "^8.0.1",
     "cross-env": "^7.0.3",
     "electron": "^27.0.0",
     "electron-builder": "^24.6.3",
+    "electron-is-dev": "^3.0.1",
+    "gh-pages": "^6.1.0",
     "react-scripts": "5.0.1",
     "wait-on": "^7.0.1"
   },
@@ -26,13 +28,16 @@
     "build": "react-scripts build",
     "test": "react-scripts test",
     "eject": "react-scripts eject",
+    "predeploy": "npm run build",
+    "deploy": "gh-pages -d build",
     "electron:dev": "concurrently \"cross-env BROWSER=none npm start\" \"wait-on http://localhost:3000 && electron .\"",
     "postbuild": "xcopy electron build\\electron /E /I /Y",
     "electron:build": "npm run build && electron-builder",
-    "electron:start": "electron ."
+    "electron:start": "electron .",
+    "build:web": "cross-env PUBLIC_URL=https://fotopoulosgeorge.github.io/productivity-calendar react-scripts build"
   },
   "build": {
-    "appId": "com.yourname.productivitycalendar",
+    "appId": "com.fotopoulosgeorge.productivitycalendar",
     "productName": "Productivity Calendar",
     "files": [
       "build/**/*",
@@ -40,17 +45,17 @@
       "node_modules/**/*",
       "icons/**/*"
     ],
-    "extraResources": 
-    {
-      "from": "icons",
-      "to": "icons"
-    }
-    ,
-    "nsis": {             
+    "extraResources": [
+      {
+        "from": "icons",
+        "to": "icons"
+      }
+    ],
+    "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "installerIcon": "icons/icon.ico",
-      "uninstallerIcon": "icons/icon.ico", 
+      "uninstallerIcon": "icons/icon.ico",
       "installerHeaderIcon": "icons/icon.ico",
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,

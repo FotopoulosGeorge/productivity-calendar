@@ -21,14 +21,13 @@ function createWindow() {
   // Create the browser window
   mainWindow = new BrowserWindow({
     width: 1200,
-    height: 800,
-    icon: iconPath,
+    height: 800,   
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
       preload: path.join(__dirname, 'preload.js'),
     },
-    //icon: path.join(__dirname, '../public/favicon.ico'),//
+    icon: iconPath,
     title: 'Productivity Calendar',
   });
   mainWindow.once('ready-to-show', () => {
