@@ -266,7 +266,7 @@ const App = () => {
               className="today-button"
               onClick={() => setCurrentDate(new Date())}
             >
-              Today
+              Current Week
             </button>
             <button 
               className="nav-button"
