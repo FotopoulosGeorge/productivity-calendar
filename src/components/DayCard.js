@@ -10,14 +10,6 @@ const DayCard = ({ date, tasks, onTaskUpdate, onAddTask, onDeleteTask, onMoveTas
   const month = date.toLocaleDateString('en-US', { month: 'short' });
   const isToday = isSameDay(date, new Date());
   
-  const getRecurringTask = () => {
-    if (dayOfWeek === 'Sunday') return 'Planning';
-    if (dayOfWeek === 'Friday') return 'Friday Reflection';
-    if (dayOfWeek !== 'Saturday') return 'Daily Check-in';
-    return null;
-  };
-  
-  const recurringTask = getRecurringTask();
 
   return (
     <div className={`day-card ${isToday ? 'day-card-today' : ''}`}>

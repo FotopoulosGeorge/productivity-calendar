@@ -32,7 +32,7 @@ const App = () => {
       setTasks(initialData);
       saveData(initialData);
     }
-  }, []); // Remove currentDate dependency to prevent recreation
+  }, [currentDate]); // Add currentDate as dependency
 
   const calculateWeeklyProgress = useCallback(() => {
     const startOfWeek = getStartOfWeek(currentDate);
@@ -45,17 +45,21 @@ const App = () => {
       const dateKey = formatDateKey(date);
       
       if (tasks[dateKey]) {
-        tasks[dateKey].forEach(task => {
+        const dayTasks = tasks[dateKey];
+        // Replace forEach with regular for loops to avoid loop function issue
+        for (let taskIndex = 0; taskIndex < dayTasks.length; taskIndex++) {
+          const task = dayTasks[taskIndex];
           if (task.steps) {
-            task.steps.forEach(step => {
+            for (let stepIndex = 0; stepIndex < task.steps.length; stepIndex++) {
+              const step = task.steps[stepIndex];
               const isComplete = step.status === 'complete';
               total += 1;
               if (isComplete) {
                 completed += 1;
               }
-            });
+            }
           }
-        });
+        }
       }
     }
     
@@ -64,7 +68,7 @@ const App = () => {
 
   useEffect(() => {
     calculateWeeklyProgress();
-  }, [tasks, currentDate, calculateWeeklyProgress]); 
+  }, [calculateWeeklyProgress]); // Use calculateWeeklyProgress instead of individual dependencies
 
   const handleTaskUpdate = (dateKey, taskIndex, updatedTask) => {
     const newTasks = {...tasks};

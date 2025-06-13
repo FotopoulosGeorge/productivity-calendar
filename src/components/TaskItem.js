@@ -14,11 +14,11 @@ const TaskItem = ({ task, onUpdate, onDeleteTask, onMoveTask }) => {
   
   // Update local state when task prop changes
   useEffect(() => {
-    setEditedTask({
+    setEditedTask(prevEditedTask => ({
       ...task,
-      id: task.id || editedTask.id
-    });
-  }, [task.id, task.title, task.steps, task.reflection]);
+      id: task.id || prevEditedTask.id
+    }));
+  }, [task]); // Only depend on task prop
   
   const handleTitleChange = (e) => {
     const updatedTask = { ...editedTask, title: e.target.value };
