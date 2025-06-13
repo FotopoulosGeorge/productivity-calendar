@@ -4,7 +4,7 @@
   "description": "A desktop productivity calendar application",
   "main": "electron/main.js",
   "homepage": "./",
-  "author": " Fotopoulos George",
+  "author": "Fotopoulos George",
   "license": "MIT",
   "private": true,
   "dependencies": {
@@ -31,10 +31,13 @@
     "predeploy": "npm run build",
     "deploy": "gh-pages -d build",
     "electron:dev": "concurrently \"cross-env BROWSER=none npm start\" \"wait-on http://localhost:3000 && electron .\"",
-    "postbuild": "xcopy electron build\\electron /E /I /Y",
     "electron:build": "npm run build && electron-builder",
+    "electron:build-all": "npm run build && electron-builder --mac --win --linux",
+    "electron:build-mac": "npm run build && electron-builder --mac",
+    "electron:build-linux": "npm run build && electron-builder --linux",
     "electron:start": "electron .",
-    "build:web": "cross-env PUBLIC_URL=https://fotopoulosgeorge.github.io/productivity-calendar react-scripts build"
+    "build:web": "cross-env PUBLIC_URL=https://fotopoulosgeorge.github.io/productivity-calendar react-scripts build",
+    "postbuild": "node scripts/copy-electron.js"
   },
   "build": {
     "appId": "com.fotopoulosgeorge.productivitycalendar",
@@ -51,6 +54,48 @@
         "to": "icons"
       }
     ],
+    "directories": {
+      "buildResources": "buildResources"
+    },
+    "mac": {
+      "category": "public.app-category.productivity",
+      "icon": "icons/icon.icns",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": ["x64", "arm64"]
+        }
+      ],
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "buildResources/entitlements.mac.plist",
+      "entitlementsInherit": "buildResources/entitlements.mac.plist"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64", "ia32"]
+        }
+      ],
+      "icon": "icons/icon.ico",
+      "verifyUpdateCodeSignature": false,
+      "signAndEditExecutable": false
+    },
+    "linux": {
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": ["x64"]
+        },
+        {
+          "target": "deb",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "icons/icon.png",
+      "category": "Office"
+    },
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
@@ -64,22 +109,10 @@
     "extraMetadata": {
       "main": "electron/main.js"
     },
-    "directories": {
-      "buildResources": "icons"
-    },
-    "mac": {
-      "category": "public.app-category.productivity",
-      "icon": "icons/icon.icns"
-    },
-    "win": {
-      "target": "nsis",
-      "icon": "icons/icon.ico",
-      "verifyUpdateCodeSignature": false,
-      "signAndEditExecutable": false
-    },
-    "linux": {
-      "target": "AppImage",
-      "icon": "icons/icon.png"
+    "publish": {
+      "provider": "github",
+      "owner": "fotopoulosgeorge",
+      "repo": "productivity-calendar"
     }
   },
   "eslintConfig": {
