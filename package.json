@@ -1,6 +1,6 @@
 {
   "name": "productivity-calendar",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "description": "A desktop productivity calendar application",
   "main": "electron/main.js",
   "homepage": "./",

@@ -1,0 +1,92 @@
+# .github/workflows/debug-build.yml
+name: Debug Build
+
+on:
+  workflow_dispatch:  # Manual trigger only for debugging
+  push:
+    branches: [ main ]  # Test on main branch pushes
+
+permissions:
+  contents: write
+
+jobs:
+  debug-build:
+    runs-on: ${{ matrix.os }}
+    
+    strategy:
+      matrix:
+        os: [ubuntu-latest]  # Start with just Linux for debugging
+        
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        
+    - name: Debug - List files
+      run: |
+        echo "=== Root directory ==="
+        ls -la
+        echo "=== Check for package.json ==="
+        cat package.json | head -20
+        
+    - name: Install dependencies
+      run: |
+        echo "=== Installing dependencies ==="
+        npm ci
+        echo "=== Dependencies installed ==="
+        
+    - name: Debug - Check scripts
+      run: |
+        echo "=== Available scripts ==="
+        npm run
+        
+    - name: Build React app
+      run: |
+        echo "=== Building React app ==="
+        npm run build
+        echo "=== React build complete ==="
+        
+    - name: Debug - Check build output
+      run: |
+        echo "=== Build directory contents ==="
+        ls -la build/ || echo "Build directory not found"
+        
+    - name: Create scripts directory if needed
+      run: |
+        mkdir -p scripts
+        echo "Scripts directory created"
+        
+    - name: Debug - Check for electron files
+      run: |
+        echo "=== Electron directory ==="
+        ls -la electron/ || echo "Electron directory not found"
+        
+    - name: Build Electron app
+      run: |
+        echo "=== Building Electron app ==="
+        npm run electron:build
+        echo "=== Electron build complete ==="
+        
+    - name: Debug - Check dist output
+      run: |
+        echo "=== Dist directory contents ==="
+        ls -la dist/ || echo "Dist directory not found"
+        if [ -d "dist" ]; then
+          find dist/ -type f -name "*" | head -10
+        fi
+        
+    - name: Upload artifacts (if any)
+      uses: actions/upload-artifact@v4
+      if: always()  # Upload even if previous steps failed
+      with:
+        name: debug-output-${{ matrix.os }}
+        path: |
+          dist/
+          build/
+          *.log
+        if-no-files-found: warn
