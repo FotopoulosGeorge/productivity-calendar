@@ -1,6 +1,6 @@
 {
   "name": "productivity-calendar",
-  "version": "1.0.2",
+  "version": "1.0.0",
   "description": "A desktop productivity calendar application",
   "main": "electron/main.js",
   "homepage": "./",
@@ -31,10 +31,10 @@
     "predeploy": "npm run build",
     "deploy": "gh-pages -d build",
     "electron:dev": "concurrently \"cross-env BROWSER=none npm start\" \"wait-on http://localhost:3000 && electron .\"",
-    "electron:build": "npm run build && electron-builder",
-    "electron:build-all": "npm run build && electron-builder --mac --win --linux",
-    "electron:build-mac": "npm run build && electron-builder --mac",
-    "electron:build-linux": "npm run build && electron-builder --linux",
+    "electron:build": "npm run build && electron-builder --publish=never",
+    "electron:build-all": "npm run build && electron-builder --mac --win --linux --publish=never",
+    "electron:build-mac": "npm run build && electron-builder --mac --publish=never",
+    "electron:build-linux": "npm run build && electron-builder --linux --publish=never",
     "electron:start": "electron .",
     "build:web": "cross-env PUBLIC_URL=https://fotopoulosgeorge.github.io/productivity-calendar react-scripts build",
     "postbuild": "node scripts/copy-electron.js"
@@ -106,11 +106,6 @@
     },
     "extraMetadata": {
       "main": "electron/main.js"
-    },
-    "publish": {
-      "provider": "github",
-      "owner": "fotopoulosgeorge",
-      "repo": "productivity-calendar"
     }
   },
   "eslintConfig": {
