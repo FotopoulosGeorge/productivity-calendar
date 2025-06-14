@@ -18,6 +18,14 @@ jobs:
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
+
+    - name: Extract version from tag
+      id: get_version
+      run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+      
+    - name: Update package.json version
+      run: |
+        npm version ${{ steps.get_version.outputs.VERSION }} --no-git-tag-version
       
     - name: Setup Node.js
       uses: actions/setup-node@v4
@@ -88,6 +96,10 @@ jobs:
       uses: actions/download-artifact@v4
       with:
         merge-multiple: true
+      
+    - name: Extract version from tag
+      id: get_version
+      run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
       
     - name: Create Release
       uses: softprops/action-gh-release@v2

@@ -1,6 +1,6 @@
 # Productivity Calendar
 
-A clean, intuitive productivity calendar application for tracking tasks and weekly progress. Available both as a web application and desktop app.
+A clean, intuitive productivity calendar application for tracking tasks and weekly progress. Available both as a web application and cross-platform desktop app.
 
 ## 🌐 Live Demo
 
@@ -10,11 +10,13 @@ A clean, intuitive productivity calendar application for tracking tasks and week
 
 - **Weekly View**: Plan and track tasks across the entire week
 - **Task Management**: Create tasks with multiple steps and track completion
-- **Progress Tracking**: Visual weekly progress indicators
-- **Reflection Notes**: Add reflections to tasks for better learning
+- **Progress Tracking**: Visual weekly progress indicators with completion percentages
+- **Reflection Notes**: Add reflections to tasks for better learning and growth
 - **Recurring Tasks**: Automatic daily check-ins, weekly planning, and Friday reflections
-- **Task Moving**: Easily move tasks between days
-- **Local Storage**: All data persists in your browser/app
+- **Task Moving**: Easily move tasks between days and weeks
+- **Data Persistence**: All data persists locally (browser localStorage or app storage)
+- **Import/Export**: Backup and restore your data as JSON files
+- **Cross-Platform**: Desktop apps for Windows, macOS, and Linux
 
 ## 🚀 Usage Options
 
@@ -23,17 +25,17 @@ Simply visit the [live demo](https://fotopoulosgeorge.github.io/productivity-cal
 
 ### Option 2: Install Desktop App (Best for daily use)
 
-1. **Download the latest release** from the [Releases page](https://github.com/yourusername/productivity-calendar/releases)
+1. **Download the latest release** from the [Releases page](https://github.com/fotopoulosgeorge/productivity-calendar/releases)
 2. **Run the installer** for your operating system:
-   - Windows: Download and run the `.exe` installer
-   - macOS: Download and open the `.dmg` file
-   - Linux: Download and run the `.AppImage` file
+   - **Windows**: Download and run the `.exe` installer
+   - **macOS**: Download and open the `.dmg` file  
+   - **Linux**: Download and run the `.AppImage` file
 
 ### Option 3: Run Locally from Source
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/productivity-calendar.git
+git clone https://github.com/fotopoulosgeorge/productivity-calendar.git
 cd productivity-calendar
 
 # Install dependencies
@@ -42,49 +44,96 @@ npm install
 # For web development
 npm start
 
-# For desktop development
+# For desktop development  
 npm run electron:dev
 
 # Build desktop app
 npm run electron:build
 ```
 
-## 🛠️ For Developers
+## 🛠️ Development
 
-### Building Web Version
-```bash
-npm run build
-npm run deploy  # Deploys to GitHub Pages
-```
+### Available Scripts
 
-### Building Desktop Version
 ```bash
-npm run electron:build
+# Development
+npm start                    # Start React development server
+npm run electron:dev         # Start React + Electron in development mode
+
+# Building
+npm run build               # Build React app for production
+npm run electron:build      # Build desktop app for current platform
+npm run electron:build-all  # Build for all platforms (Windows, macOS, Linux)
+
+# Deployment
+npm run deploy              # Deploy web version to GitHub Pages
 ```
 
 ### Project Structure
+
 ```
-- **src/** - React application source
-  - `App.js` - Main application component
-  - `index.js`
-  - **components/** - UI components
-    - `WeeklyBanner.js` - Top banner showing weekly progress
-    - `DayCard.js` - Card component for each day
-    - `TaskItem.js` - Component for individual tasks
-    - `StepItem.js` - Component for task steps
-  - **utils/** - Utility functions
-    - `dateUtils.js` - Date manipulation functions
-    - `storageUtils.js` - Local storage functions
-    - `taskUtils.js` - Creates Unique ID for tasks
-  - **styles/** - CSS files
-  - **icons/** - Icon files
+productivity-calendar/
+├── .github/workflows/       # GitHub Actions for automated builds
+│   └── build.yml           # Build and release workflow
+├── buildResources/         # Electron builder resources
+│   └── entitlements.amc.plist
+├── electron/               # Electron main process files
+│   ├── main.js            # Main Electron process
+│   └── preload.js         # Preload script for secure IPC
+├── icons/                  # Application icons (all platforms)
+├── public/                 # Static files for React app
+│   └── index.html         # HTML template
+├── scripts/               # Build scripts
+│   └── copy-electron.js   # Copy Electron files to build
+├── src/                   # React application source
+│   ├── components/        # React components
+│   │   ├── DayCard.js     # Individual day display
+│   │   ├── StepItem.js    # Task step component
+│   │   ├── TaskItem.js    # Task management component
+│   │   └── WeeklyBanner.js # Progress banner
+│   ├── styles/            # CSS styling
+│   │   ├── components/    # Component-specific styles
+│   │   ├── App.css        # Main app styles
+│   │   └── index.css      # Global styles
+│   ├── utils/             # Utility functions
+│   │   ├── dateUtils.js   # Date manipulation helpers
+│   │   ├── storageUtils.js # LocalStorage operations
+│   │   └── taskUtils.js   # Task creation and management
+│   ├── App.js             # Main React component
+│   └── index.js           # React entry point
+├── .gitignore             # Git ignore rules
+├── package.json           # Dependencies and scripts
+└── README.md              # This file
 ```
 
-## 📱 Data Storage
+## 🔧 Technical Stack
+
+- **Frontend**: React 18, Lucide React (icons)
+- **Desktop**: Electron 27
+- **Build**: electron-builder, GitHub Actions
+- **Styling**: CSS with component-based architecture
+- **Storage**: localStorage (web), local files (desktop)
+
+## 📊 Data Management
 
 - **Web Version**: Uses browser localStorage
-- **Desktop Version**: Uses local storage within the app
-- **Export/Import**: Features planned for future releases
+- **Desktop Version**: Uses Electron's local storage
+- **Backup**: Export/Import functionality for data portability
+- **Migration**: Automatic data migration for version updates
+
+## 🚀 Deployment
+
+### Web Deployment
+The web version auto-deploys to GitHub Pages when you run:
+```bash
+npm run deploy
+```
+
+### Desktop App Releases
+Desktop releases are automated via GitHub Actions:
+1. Tag a release: `git tag v1.0.0 && git push origin v1.0.0`
+2. GitHub Actions automatically builds for all platforms
+3. Installers are attached to the GitHub release
 
 ## 🤝 Contributing
 
@@ -100,8 +149,8 @@ MIT License - see [LICENSE](LICENSE) file for details.
 
 ## 🆘 Support
 
-- **Issues**: Report bugs or request features in [GitHub Issues](https://github.com/yourusername/productivity-calendar/issues)
-- **Discussions**: Join conversations in [GitHub Discussions](https://github.com/yourusername/productivity-calendar/discussions)
+- **Issues**: Report bugs or request features in [GitHub Issues](https://github.com/fotopoulosgeorge/productivity-calendar/issues)
+- **Discussions**: Join conversations in [GitHub Discussions](https://github.com/fotopoulosgeorge/productivity-calendar/discussions)
 
 ---
 
