@@ -35,25 +35,48 @@ jobs:
       if: matrix.os == 'windows-latest'
       run: npm run electron:build -- --publish=never
       env:
-       GH_TOKEN: ${{ secrets.GH_TOKEN }}
+        GH_TOKEN: ${{ secrets.GH_TOKEN }}
         
     - name: Build Electron app (macOS)
       if: matrix.os == 'macos-latest'
       run: npm run electron:build -- --publish=never
       env:
-       GH_TOKEN: ${{ secrets.GH_TOKEN }}
+        GH_TOKEN: ${{ secrets.GH_TOKEN }}
         
     - name: Build Electron app (Linux)
       if: matrix.os == 'ubuntu-latest'
       run: npm run electron:build -- --publish=never
       env:
-       GH_TOKEN: ${{ secrets.GH_TOKEN }}
+        GH_TOKEN: ${{ secrets.GH_TOKEN }}
         
-    - name: Upload artifacts
+    # Upload only installer files, not the entire dist folder
+    - name: Upload Windows artifacts
+      if: matrix.os == 'windows-latest'
       uses: actions/upload-artifact@v4
       with:
-        name: builds-${{ matrix.os }}
-        path: dist/
+        name: windows-installer
+        path: |
+          dist/*.exe
+          dist/*.msi
+          
+    - name: Upload macOS artifacts
+      if: matrix.os == 'macos-latest'
+      uses: actions/upload-artifact@v4
+      with:
+        name: macos-installer
+        path: |
+          dist/*.dmg
+          dist/*.pkg
+          
+    - name: Upload Linux artifacts
+      if: matrix.os == 'ubuntu-latest'
+      uses: actions/upload-artifact@v4
+      with:
+        name: linux-installer
+        path: |
+          dist/*.AppImage
+          dist/*.deb
+          dist/*.rpm
         
   release:
     needs: build
@@ -64,13 +87,18 @@ jobs:
     - name: Download all artifacts
       uses: actions/download-artifact@v4
       with:
-        pattern: builds-*
         merge-multiple: true
       
     - name: Create Release
       uses: softprops/action-gh-release@v2
       with:
         files: |
-          **/*
+          *.exe
+          *.msi
+          *.dmg
+          *.pkg
+          *.AppImage
+          *.deb
+          *.rpm
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
