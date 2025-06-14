@@ -87,14 +87,12 @@
         {
           "target": "AppImage",
           "arch": ["x64"]
-        },
-        {
-          "target": "deb",
-          "arch": ["x64"]
         }
       ],
       "icon": "icons/icon.png",
-      "category": "Office"
+      "category": "Office",
+      "maintainer": "Fotopoulos George",
+      "vendor": "Fotopoulos George"
     },
     "nsis": {
       "oneClick": false,
