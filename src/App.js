@@ -1,38 +1,65 @@
-// src/App.js
+// src/App.js - Updated with Google Drive Sync
 import React, { useState, useEffect, useCallback } from 'react';
 import { Calendar } from 'lucide-react';
 import WeeklyBanner from './components/WeeklyBanner';
 import DayCard from './components/DayCard';
+import SyncStatusBanner from './components/SyncStatusBanner';
 import { getStartOfWeek, formatDateKey} from './utils/dateUtils';
 import { loadData, saveData } from './utils/storageUtils';
 import { generateTaskId, deepCloneTask, createRecurringTask } from './utils/taskUtils';
 import './styles/App.css';
+import './styles/components/SyncStatusBanner.css';
+import QuickGoogleTest from './components/QuickGoogleTest';
 
 const App = () => {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [tasks, setTasks] = useState({});
   const [weeklyProgress, setWeeklyProgress] = useState({ completed: 0, total: 0 });
+  const [syncStatus, setSyncStatus] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
   
   useEffect(() => {
-    // Load data from storage or create initial data
-    const savedData = loadData();
-    if (savedData && Object.keys(savedData).length > 0) {
-      // Ensure all tasks have unique IDs
-      const tasksWithIds = {};
-      Object.keys(savedData).forEach(dateKey => {
-        tasksWithIds[dateKey] = savedData[dateKey].map(task => ({
-          ...task,
-          id: task.id || generateTaskId()
-        }));
-      });
-      setTasks(tasksWithIds);
-      saveData(tasksWithIds);
-    } else {
+    initializeApp();
+  }, []);
+
+  const initializeApp = async () => {
+    setIsLoading(true);
+    try {
+      // Load data from storage (will automatically check Google Drive if connected)
+      const savedData = await loadData();
+      
+      if (savedData && Object.keys(savedData).length > 0) {
+        // Remove sync metadata before processing tasks
+        const { lastSyncedAt, syncedFrom, ...taskData } = savedData;
+        
+        // Ensure all tasks have unique IDs
+        const tasksWithIds = {};
+        Object.keys(taskData).forEach(dateKey => {
+          tasksWithIds[dateKey] = taskData[dateKey].map(task => ({
+            ...task,
+            id: task.id || generateTaskId()
+          }));
+        });
+        setTasks(tasksWithIds);
+        
+        // Save back with IDs if they were missing
+        if (JSON.stringify(tasksWithIds) !== JSON.stringify(taskData)) {
+          await saveData(tasksWithIds);
+        }
+      } else {
+        const initialData = createInitialData(currentDate);
+        setTasks(initialData);
+        await saveData(initialData);
+      }
+    } catch (error) {
+      console.error('Failed to initialize app:', error);
+      // Fallback to creating initial data
       const initialData = createInitialData(currentDate);
       setTasks(initialData);
-      saveData(initialData);
+    } finally {
+      setIsLoading(false);
     }
-  }, [currentDate]); // Add currentDate as dependency
+  };
 
   const calculateWeeklyProgress = useCallback(() => {
     const startOfWeek = getStartOfWeek(currentDate);
@@ -46,7 +73,6 @@ const App = () => {
       
       if (tasks[dateKey]) {
         const dayTasks = tasks[dateKey];
-        // Replace forEach with regular for loops to avoid loop function issue
         for (let taskIndex = 0; taskIndex < dayTasks.length; taskIndex++) {
           const task = dayTasks[taskIndex];
           if (task.steps) {
@@ -68,67 +94,94 @@ const App = () => {
 
   useEffect(() => {
     calculateWeeklyProgress();
-  }, [calculateWeeklyProgress]); // Use calculateWeeklyProgress instead of individual dependencies
+  }, [calculateWeeklyProgress]);
 
-  const handleTaskUpdate = (dateKey, taskIndex, updatedTask) => {
+  const handleTaskUpdate = async (dateKey, taskIndex, updatedTask) => {
     const newTasks = {...tasks};
-    // Ensure we're updating the specific task instance
     newTasks[dateKey][taskIndex] = {
       ...updatedTask,
-      id: newTasks[dateKey][taskIndex].id // Preserve the original ID
+      id: newTasks[dateKey][taskIndex].id,
+      lastModified: new Date().toISOString()
     };
     setTasks(newTasks);
-    saveData(newTasks);
+    
+    // Save with sync
+    try {
+      await saveData(newTasks);
+    } catch (error) {
+      console.error('Failed to save task update:', error);
+      // Continue anyway - user can manually sync later
+    }
   };
   
-  const handleAddTask = (dateKey) => {
+  const handleAddTask = async (dateKey) => {
     const newTasks = {...tasks};
     if (!newTasks[dateKey]) {
       newTasks[dateKey] = [];
     }
     
-    newTasks[dateKey].push(createRecurringTask('default'));
+    const newTask = createRecurringTask('default');
+    newTask.lastModified = new Date().toISOString();
+    newTasks[dateKey].push(newTask);
     
     setTasks(newTasks);
-    saveData(newTasks);
+    
+    try {
+      await saveData(newTasks);
+    } catch (error) {
+      console.error('Failed to save new task:', error);
+    }
   };
 
-  const handleDeleteTask = (dateKey, taskIndex) => {
+  const handleDeleteTask = async (dateKey, taskIndex) => {
     const newTasks = {...tasks};
     newTasks[dateKey].splice(taskIndex, 1);
     setTasks(newTasks);
-    saveData(newTasks);
+    
+    try {
+      await saveData(newTasks);
+    } catch (error) {
+      console.error('Failed to save task deletion:', error);
+    }
   };
 
-  const handleMoveTask = (fromDateKey, taskIndex, toDateKey) => {
+  const handleMoveTask = async (fromDateKey, taskIndex, toDateKey) => {
     const newTasks = {...tasks};
     
-    // If the destination date doesn't have an array yet, create one
     if (!newTasks[toDateKey]) {
       newTasks[toDateKey] = [];
     }
     
-    // Deep clone the task to avoid reference issues
     const taskToMove = deepCloneTask(newTasks[fromDateKey][taskIndex]);
-    
-    // Generate new ID for the moved task to ensure uniqueness
     taskToMove.id = generateTaskId();
+    taskToMove.lastModified = new Date().toISOString();
     
-    // Add to new date
     newTasks[toDateKey].push(taskToMove);
-    
-    // Remove from original date
     newTasks[fromDateKey].splice(taskIndex, 1);
     
     setTasks(newTasks);
-    saveData(newTasks);
+    
+    try {
+      await saveData(newTasks);
+    } catch (error) {
+      console.error('Failed to save task move:', error);
+    }
+  };
+
+  const handleSyncStatusChange = (newSyncStatus) => {
+    setSyncStatus(newSyncStatus);
+    
+    // If sync was just enabled and we have different data, reload
+    if (newSyncStatus.syncEnabled && newSyncStatus.status === 'connected') {
+      // Optionally reload data to get latest from cloud
+      // initializeApp();
+    }
   };
   
   const createInitialData = (date) => {
     const startOfWeek = getStartOfWeek(date);
     const initialData = {};
     
-    // Add recurring tasks based on day of week
     for (let i = 0; i < 7; i++) {
       const date = new Date(startOfWeek);
       date.setDate(date.getDate() + i);
@@ -137,12 +190,11 @@ const App = () => {
       
       initialData[dateKey] = [];
       
-      // Add recurring tasks with unique IDs
-      if (dayOfWeek === 0) { // Sunday
+      if (dayOfWeek === 0) {
         initialData[dateKey].push(createRecurringTask('planning'));
-      } else if (dayOfWeek === 5) { // Friday
+      } else if (dayOfWeek === 5) {
         initialData[dateKey].push(createRecurringTask('reflection'));
-      } else if (dayOfWeek !== 6) { // Monday-Thursday
+      } else if (dayOfWeek !== 6) {
         initialData[dateKey].push(createRecurringTask('checkin'));
       }
     }
@@ -164,44 +216,35 @@ const App = () => {
         updatedTasks[dateKey] = [];
         tasksAdded = true;
         
-        // Add recurring tasks with unique IDs
-        if (dayOfWeek === 0) { // Sunday
-          updatedTasks[dateKey].push({
-            id: generateTaskId(),
-            title: "Weekly Planning",
-            steps: [
-              { description: "Review previous week", status: "pending" },
-              { description: "Set new goals", status: "pending" },
-              { description: "Schedule important tasks", status: "pending" }
-            ],
-            reflection: ""
-          });
-        } else if (dayOfWeek === 5) { // Friday
-          updatedTasks[dateKey].push({
-            id: generateTaskId(),
-            title: "Friday Reflection",
-            steps: [
-              { description: "Review week's accomplishments", status: "pending" },
-              { description: "Note learnings", status: "pending" },
-              { description: "Plan for next week", status: "pending" }
-            ],
-            reflection: ""
-          });
-        } else if (dayOfWeek !== 6) { // Monday-Thursday
-          updatedTasks[dateKey].push({
-            id: generateTaskId(),
-            title: "Daily Check-in",
-            steps: [
-              { description: "Review today's tasks", status: "pending" },
-              { description: "Set priorities", status: "pending" }
-            ],
-            reflection: ""
-          });
+        if (dayOfWeek === 0) {
+          updatedTasks[dateKey].push(createRecurringTask('planning'));
+        } else if (dayOfWeek === 5) {
+          updatedTasks[dateKey].push(createRecurringTask('reflection'));
+        } else if (dayOfWeek !== 6) {
+          updatedTasks[dateKey].push(createRecurringTask('checkin'));
         }
       }
     }
     
     return { updatedTasks, tasksAdded };
+  };
+
+  const handleWeekNavigation = async (direction) => {
+    const newDate = new Date(currentDate);
+    newDate.setDate(newDate.getDate() + (direction * 7));
+    setCurrentDate(newDate);
+    
+    const startOfWeek = getStartOfWeek(newDate);
+    const { updatedTasks, tasksAdded } = generateTasksForWeek(startOfWeek);
+    
+    if (tasksAdded) {
+      setTasks(updatedTasks);
+      try {
+        await saveData(updatedTasks);
+      } catch (error) {
+        console.error('Failed to save week navigation changes:', error);
+      }
+    }
   };
 
   const renderWeekView = () => {
@@ -213,8 +256,8 @@ const App = () => {
       date.setDate(date.getDate() + i);
       daysOfWeek.push(date);
     }
-    
-    return (
+    <QuickGoogleTest />
+    return ( 
       <div className="week-view">
         <WeeklyBanner progress={weeklyProgress} tasks={tasks}/>
         <div className="days-grid">
@@ -236,6 +279,19 @@ const App = () => {
       </div>
     );
   };
+
+  if (isLoading) {
+    return (
+      <div className="app-container">
+        <div className="app-content">
+          <div className="loading-container">
+            <div className="loading-spinner"></div>
+            <p>Loading your calendar...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
   
   return (
     <div className="app-container">
@@ -248,20 +304,7 @@ const App = () => {
           <div className="app-controls">
             <button 
               className="nav-button"
-              onClick={() => {
-                const newDate = new Date(currentDate);
-                newDate.setDate(newDate.getDate() - 7);
-                setCurrentDate(newDate);
-                
-                // Generate tasks for the new week if they don't exist
-                const startOfWeek = getStartOfWeek(newDate);
-                const { updatedTasks, tasksAdded } = generateTasksForWeek(startOfWeek);
-                
-                if (tasksAdded) {
-                  setTasks(updatedTasks);
-                  saveData(updatedTasks);
-                }
-              }}
+              onClick={() => handleWeekNavigation(-1)}
             >
              &lt; Previous Week
             </button>
@@ -272,27 +315,19 @@ const App = () => {
             >
               Current Week
             </button>
+            
             <button 
               className="nav-button"
-              onClick={() => {
-                const newDate = new Date(currentDate);
-                newDate.setDate(newDate.getDate() + 7);
-                setCurrentDate(newDate);
-                
-                // Generate tasks for the new week if they don't exist
-                const startOfWeek = getStartOfWeek(newDate);
-                const { updatedTasks, tasksAdded } = generateTasksForWeek(startOfWeek);
-                
-                if (tasksAdded) {
-                  setTasks(updatedTasks);
-                  saveData(updatedTasks);
-                }
-              }}
+              onClick={() => handleWeekNavigation(1)}
             >
               Next Week &gt;
             </button>
           </div>
         </div>
+
+        {/* Google Drive Sync Status */}
+        <SyncStatusBanner onSyncStatusChange={handleSyncStatusChange} />
+
         {renderWeekView()}
       </div>
     </div>

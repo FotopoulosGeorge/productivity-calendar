@@ -26,16 +26,52 @@ function createWindow() {
       nodeIntegration: false,
       contextIsolation: true,
       preload: path.join(__dirname, 'preload.js'),
+      webSecurity: true, // Keep security enabled
+      allowRunningInsecureContent: false,
+      // Allow Google domains for authentication
+      additionalArguments: [
+        '--disable-web-security',
+        '--disable-features=VizDisplayCompositor'
+      ]
     },
     icon: iconPath,
     title: 'Productivity Calendar',
   });
+
+  const session = mainWindow.webContents.session;
+
+  // Set permissions for Google APIs
+  session.setPermissionRequestHandler((webContents, permission, callback) => {
+    const allowedPermissions = ['notifications', 'geolocation', 'media', 'camera', 'microphone'];
+    return callback(allowedPermissions.includes(permission));
+  });
+
+  // Configure CSP to allow Google domains
+  session.webRequest.onHeadersReceived((details, callback) => {
+    callback({
+      responseHeaders: {
+        ...details.responseHeaders,
+        'Content-Security-Policy': [
+          `default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob:; ` +
+          `script-src 'self' 'unsafe-inline' 'unsafe-eval' https://apis.google.com https://accounts.google.com https://www.googleapis.com https://ssl.gstatic.com https://www.gstatic.com; ` +
+          `connect-src 'self' https://apis.google.com https://accounts.google.com https://www.googleapis.com https://oauth2.googleapis.com https://content.googleapis.com; ` +
+          `frame-src 'self' https://accounts.google.com https://content.googleapis.com; ` +
+          `img-src 'self' data: https:; ` +
+          `style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; ` +
+          `font-src 'self' https://fonts.gstatic.com;`
+        ]
+      }
+    });
+  });
+
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
     if (process.platform === 'win32') {
       mainWindow.setIcon(iconPath);
     }
   });
+
+
   // Check if we're in development or production
   const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
   
@@ -110,6 +146,8 @@ ipcMain.handle('import-data', async (event) => {
   
   return { success: false, error: 'Import cancelled' };
 });
+
+
 
 // Setup application menu
 function setupAppMenu() {

@@ -1,0 +1,446 @@
+/* src/styles/components/SyncStatusBanner.css */
+
+.sync-status-banner {
+  background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 1rem;
+  margin-bottom: 1rem;
+  transition: all 0.3s ease;
+}
+
+.sync-status-banner.connected {
+  background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+  border-color: #0ea5e9;
+}
+
+.sync-status-banner.syncing {
+  background: linear-gradient(135deg, #fefce8 0%, #fef3c7 100%);
+  border-color: #f59e0b;
+}
+
+.sync-status-banner.error {
+  background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
+  border-color: #ef4444;
+}
+
+.sync-main-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+}
+
+.sync-status-info {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-grow: 1;
+}
+
+.sync-icon {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+.sync-icon.success {
+  color: #22c55e;
+}
+
+.sync-icon.error {
+  color: #ef4444;
+}
+
+.sync-icon.disconnected {
+  color: #64748b;
+}
+
+.sync-icon.spinning {
+  color: #f59e0b;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.sync-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.sync-primary-text {
+  font-weight: 500;
+  color: #1e293b;
+  font-size: 0.875rem;
+}
+
+.sync-secondary-text {
+  font-size: 0.75rem;
+  color: #64748b;
+}
+
+.sync-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.sync-button {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.sync-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.sync-button.connect {
+  background-color: #3b82f6;
+  color: white;
+}
+
+.sync-button.connect:hover:not(:disabled) {
+  background-color: #2563eb;
+}
+
+.sync-button.disconnect {
+  background-color: #f1f5f9;
+  color: #475569;
+  border: 1px solid #e2e8f0;
+}
+
+.sync-button.disconnect:hover:not(:disabled) {
+  background-color: #e2e8f0;
+}
+
+.sync-details-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background-color: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.sync-details-button:hover {
+  background-color: #f1f5f9;
+}
+
+.button-icon {
+  width: 16px;
+  height: 16px;
+}
+
+.sync-details {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid #e2e8f0;
+}
+
+.sync-detail-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.25rem 0;
+  font-size: 0.875rem;
+}
+
+.detail-label {
+  color: #64748b;
+  font-weight: 500;
+}
+
+.detail-value {
+  color: #1e293b;
+}
+
+.sync-info-text {
+  margin-top: 0.75rem;
+  padding: 0.75rem;
+  background-color: rgba(59, 130, 246, 0.05);
+  border-radius: 6px;
+  border-left: 3px solid #3b82f6;
+}
+
+.sync-info-text p {
+  margin: 0;
+  font-size: 0.875rem;
+  color: #475569;
+  line-height: 1.5;
+}
+
+.sync-info-text strong {
+  color: #1e293b;
+}
+
+/* Mobile responsiveness */
+@media (max-width: 768px) {
+  .sync-main-content {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.75rem;
+  }
+  
+  .sync-status-info {
+    justify-content: center;
+  }
+  
+  .sync-actions {
+    justify-content: center;
+  }
+  
+  .sync-button {
+    flex: 1;
+    justify-content: center;
+  }
+  
+  .sync-detail-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.25rem;
+  }
+  
+  .detail-value {
+    font-size: 0.8125rem;
+  }
+}
+
+/* Add to src/styles/components/SyncStatusBanner.css */
+
+/* Invitation banner styles */
+.sync-status-banner.invitation {
+  background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+  border-color: #0ea5e9;
+  border-width: 2px;
+}
+
+.sync-icon.info {
+  color: #0ea5e9;
+}
+
+.sync-dismiss-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background-color: transparent;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  color: #64748b;
+}
+
+.sync-dismiss-button:hover {
+  background-color: #f1f5f9;
+  color: #475569;
+}
+
+/* Corner sync enable button */
+.sync-enable-corner {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  z-index: 100;
+}
+
+.sync-corner-button {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  color: white;
+  border: none;
+  border-radius: 25px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+  transition: all 0.3s ease;
+}
+
+.sync-corner-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(59, 130, 246, 0.4);
+}
+
+.sync-corner-button .button-icon {
+  width: 16px;
+  height: 16px;
+}
+
+/* Merge dialog styles */
+.merge-dialog-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  backdrop-filter: blur(4px);
+}
+
+.merge-dialog {
+  background: white;
+  border-radius: 12px;
+  padding: 2rem;
+  max-width: 500px;
+  width: 90%;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
+  animation: slideIn 0.3s ease-out;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: scale(0.9) translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.merge-dialog h3 {
+  margin: 0 0 1rem 0;
+  color: #1e293b;
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.merge-dialog p {
+  margin: 0 0 1.5rem 0;
+  color: #475569;
+  line-height: 1.6;
+}
+
+.merge-stats {
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.merge-stat {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: #475569;
+  font-size: 0.875rem;
+}
+
+.merge-stat strong {
+  color: #1e293b;
+  font-size: 1.25rem;
+}
+
+.merge-actions {
+  display: flex;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.merge-button {
+  flex: 1;
+  padding: 0.75rem 1.5rem;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.merge-button.cancel {
+  background-color: #f8fafc;
+  color: #475569;
+  border: 1px solid #e2e8f0;
+}
+
+.merge-button.cancel:hover {
+  background-color: #f1f5f9;
+}
+
+.merge-button.confirm {
+  background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+  color: white;
+}
+
+.merge-button.confirm:hover:not(:disabled) {
+  background: linear-gradient(135deg, #16a34a 0%, #15803d 100%);
+}
+
+.merge-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.merge-note {
+  padding: 0.75rem;
+  background-color: rgba(34, 197, 94, 0.05);
+  border-radius: 6px;
+  border-left: 3px solid #22c55e;
+}
+
+.merge-note small {
+  color: #475569;
+  line-height: 1.4;
+}
+
+.merge-note strong {
+  color: #16a34a;
+}
+
+/* Mobile responsiveness for new elements */
+@media (max-width: 768px) {
+  .sync-enable-corner {
+    bottom: 15px;
+    right: 15px;
+  }
+  
+  .sync-corner-button {
+    padding: 0.5rem 0.75rem;
+    font-size: 0.8125rem;
+  }
+  
+  .sync-corner-button span {
+    display: none; /* Hide text on mobile, show only icon */
+  }
+  
+  .merge-dialog {
+    padding: 1.5rem;
+    margin: 1rem;
+  }
+  
+  .merge-actions {
+    flex-direction: column;
+  }
+}
