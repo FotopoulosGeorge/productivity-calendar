@@ -1,4 +1,4 @@
-// src/App.js - Updated with Google Drive Sync
+// src/App.js - Fixed with data validation and single load
 import React, { useState, useEffect, useCallback } from 'react';
 import { Calendar } from 'lucide-react';
 import WeeklyBanner from './components/WeeklyBanner';
@@ -8,8 +8,6 @@ import { getStartOfWeek, formatDateKey} from './utils/dateUtils';
 import { loadData, saveData } from './utils/storageUtils';
 import { generateTaskId, deepCloneTask, createRecurringTask } from './utils/taskUtils';
 import './styles/App.css';
-import './styles/components/SyncStatusBanner.css';
-import QuickGoogleTest from './components/QuickGoogleTest';
 
 const App = () => {
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -17,45 +15,112 @@ const App = () => {
   const [weeklyProgress, setWeeklyProgress] = useState({ completed: 0, total: 0 });
   const [syncStatus, setSyncStatus] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [hasInitialized, setHasInitialized] = useState(false);
   
   useEffect(() => {
-    initializeApp();
-  }, []);
+    // CRITICAL: Only initialize once
+    if (!hasInitialized) {
+      initializeApp();
+      setHasInitialized(true);
+    }
+  }, [hasInitialized]);
+
+  const validateAndCleanData = (data) => {
+    console.log('🔍 Validating data structure...', { type: typeof data, keys: data ? Object.keys(data).length : 0 });
+    
+    if (!data || typeof data !== 'object') {
+      console.log('⚠️ Data is null or not an object, returning empty');
+      return {};
+    }
+
+    const cleanedData = {};
+    
+    // Remove sync metadata first
+    const { lastSyncedAt, syncedFrom, localTimestamp, syncVersion, ...taskData } = data;
+    
+    Object.keys(taskData).forEach(dateKey => {
+      const dayData = taskData[dateKey];
+      
+      // Validate that each day has an array of tasks
+      if (Array.isArray(dayData)) {
+        // Validate each task has the required structure
+        cleanedData[dateKey] = dayData.map((task, index) => {
+          if (!task || typeof task !== 'object') {
+            console.warn(`⚠️ Invalid task at ${dateKey}[${index}], creating default`);
+            return createRecurringTask('default');
+          }
+          
+          // Ensure task has required properties
+          return {
+            id: task.id || generateTaskId(),
+            title: task.title || 'Untitled Task',
+            steps: Array.isArray(task.steps) ? task.steps : [
+              { description: 'Complete task', status: 'pending' }
+            ],
+            reflection: task.reflection || '',
+            lastModified: task.lastModified || new Date().toISOString()
+          };
+        });
+      } else if (dayData !== undefined && dayData !== null) {
+        console.warn(`⚠️ Invalid day data for ${dateKey}, expected array but got:`, typeof dayData);
+        cleanedData[dateKey] = [];
+      }
+    });
+    
+    console.log('✅ Data validation complete', { 
+      originalKeys: Object.keys(data).length,
+      cleanedKeys: Object.keys(cleanedData).length,
+      totalTasks: Object.values(cleanedData).flat().length
+    });
+    
+    return cleanedData;
+  };
 
   const initializeApp = async () => {
+    console.log('🚀 Initializing app (single call)...');
     setIsLoading(true);
+    
     try {
-      // Load data from storage (will automatically check Google Drive if connected)
+      // CRITICAL: Single call to loadData
+      console.log('📥 Loading data (one time only)...');
       const savedData = await loadData();
+      console.log('📊 Raw data loaded:', { 
+        hasData: !!savedData, 
+        type: typeof savedData,
+        keys: savedData ? Object.keys(savedData).length : 0
+      });
       
       if (savedData && Object.keys(savedData).length > 0) {
-        // Remove sync metadata before processing tasks
-        const { lastSyncedAt, syncedFrom, ...taskData } = savedData;
+        // Clean and validate the data structure
+        const cleanedTasks = validateAndCleanData(savedData);
         
-        // Ensure all tasks have unique IDs
-        const tasksWithIds = {};
-        Object.keys(taskData).forEach(dateKey => {
-          tasksWithIds[dateKey] = taskData[dateKey].map(task => ({
-            ...task,
-            id: task.id || generateTaskId()
-          }));
+        console.log('✅ Setting cleaned tasks:', {
+          taskCount: Object.values(cleanedTasks).flat().length,
+          dateKeys: Object.keys(cleanedTasks)
         });
-        setTasks(tasksWithIds);
         
-        // Save back with IDs if they were missing
-        if (JSON.stringify(tasksWithIds) !== JSON.stringify(taskData)) {
-          await saveData(tasksWithIds);
+        setTasks(cleanedTasks);
+        
+        // Save the cleaned data back (in case it was corrupted)
+        if (Object.keys(cleanedTasks).length > 0) {
+          console.log('💾 Saving cleaned data back to storage...');
+          await saveData(cleanedTasks);
         }
       } else {
+        console.log('📝 No saved data, creating initial data...');
         const initialData = createInitialData(currentDate);
-        setTasks(initialData);
-        await saveData(initialData);
+        const cleanedInitial = validateAndCleanData(initialData);
+        setTasks(cleanedInitial);
+        await saveData(cleanedInitial);
       }
+      
+      console.log('✅ App initialization complete');
     } catch (error) {
-      console.error('Failed to initialize app:', error);
+      console.error('❌ Failed to initialize app:', error);
       // Fallback to creating initial data
       const initialData = createInitialData(currentDate);
-      setTasks(initialData);
+      const cleanedInitial = validateAndCleanData(initialData);
+      setTasks(cleanedInitial);
     } finally {
       setIsLoading(false);
     }
@@ -71,11 +136,11 @@ const App = () => {
       date.setDate(date.getDate() + i);
       const dateKey = formatDateKey(date);
       
-      if (tasks[dateKey]) {
+      if (tasks[dateKey] && Array.isArray(tasks[dateKey])) {
         const dayTasks = tasks[dateKey];
         for (let taskIndex = 0; taskIndex < dayTasks.length; taskIndex++) {
           const task = dayTasks[taskIndex];
-          if (task.steps) {
+          if (task.steps && Array.isArray(task.steps)) {
             for (let stepIndex = 0; stepIndex < task.steps.length; stepIndex++) {
               const step = task.steps[stepIndex];
               const isComplete = step.status === 'complete';
@@ -93,30 +158,49 @@ const App = () => {
   }, [currentDate, tasks]);
 
   useEffect(() => {
-    calculateWeeklyProgress();
-  }, [calculateWeeklyProgress]);
+    if (!isLoading) {
+      calculateWeeklyProgress();
+    }
+  }, [calculateWeeklyProgress, isLoading]);
 
   const handleTaskUpdate = async (dateKey, taskIndex, updatedTask) => {
+    console.log('📝 Updating task:', { dateKey, taskIndex, taskId: updatedTask.id });
+    
     const newTasks = {...tasks};
+    
+    // Validate the date key exists and is an array
+    if (!newTasks[dateKey] || !Array.isArray(newTasks[dateKey])) {
+      console.warn('⚠️ Invalid dateKey or not an array:', dateKey);
+      newTasks[dateKey] = [];
+    }
+    
+    // Validate task index
+    if (taskIndex < 0 || taskIndex >= newTasks[dateKey].length) {
+      console.warn('⚠️ Invalid taskIndex:', taskIndex);
+      return;
+    }
+    
     newTasks[dateKey][taskIndex] = {
       ...updatedTask,
       id: newTasks[dateKey][taskIndex].id,
       lastModified: new Date().toISOString()
     };
+    
     setTasks(newTasks);
     
-    // Save with sync
     try {
       await saveData(newTasks);
+      console.log('✅ Task update saved successfully');
     } catch (error) {
-      console.error('Failed to save task update:', error);
-      // Continue anyway - user can manually sync later
+      console.error('❌ Failed to save task update:', error);
     }
   };
   
   const handleAddTask = async (dateKey) => {
+    console.log('➕ Adding task to:', dateKey);
+    
     const newTasks = {...tasks};
-    if (!newTasks[dateKey]) {
+    if (!newTasks[dateKey] || !Array.isArray(newTasks[dateKey])) {
       newTasks[dateKey] = [];
     }
     
@@ -128,27 +212,56 @@ const App = () => {
     
     try {
       await saveData(newTasks);
+      console.log('✅ New task saved successfully', { dateKey, taskCount: newTasks[dateKey].length });
     } catch (error) {
-      console.error('Failed to save new task:', error);
+      console.error('❌ Failed to save new task:', error);
     }
   };
 
   const handleDeleteTask = async (dateKey, taskIndex) => {
+    console.log('🗑️ Deleting task:', { dateKey, taskIndex });
+    
     const newTasks = {...tasks};
+    
+    if (!newTasks[dateKey] || !Array.isArray(newTasks[dateKey])) {
+      console.warn('⚠️ Cannot delete from invalid dateKey:', dateKey);
+      return;
+    }
+    
+    if (taskIndex < 0 || taskIndex >= newTasks[dateKey].length) {
+      console.warn('⚠️ Cannot delete invalid taskIndex:', taskIndex);
+      return;
+    }
+    
     newTasks[dateKey].splice(taskIndex, 1);
     setTasks(newTasks);
     
     try {
       await saveData(newTasks);
+      console.log('✅ Task deletion saved successfully');
     } catch (error) {
-      console.error('Failed to save task deletion:', error);
+      console.error('❌ Failed to save task deletion:', error);
     }
   };
 
   const handleMoveTask = async (fromDateKey, taskIndex, toDateKey) => {
+    console.log('🔄 Moving task:', { fromDateKey, taskIndex, toDateKey });
+    
     const newTasks = {...tasks};
     
-    if (!newTasks[toDateKey]) {
+    // Validate source
+    if (!newTasks[fromDateKey] || !Array.isArray(newTasks[fromDateKey])) {
+      console.warn('⚠️ Cannot move from invalid dateKey:', fromDateKey);
+      return;
+    }
+    
+    if (taskIndex < 0 || taskIndex >= newTasks[fromDateKey].length) {
+      console.warn('⚠️ Cannot move invalid taskIndex:', taskIndex);
+      return;
+    }
+    
+    // Ensure destination exists
+    if (!newTasks[toDateKey] || !Array.isArray(newTasks[toDateKey])) {
       newTasks[toDateKey] = [];
     }
     
@@ -163,19 +276,14 @@ const App = () => {
     
     try {
       await saveData(newTasks);
+      console.log('✅ Task move saved successfully');
     } catch (error) {
-      console.error('Failed to save task move:', error);
+      console.error('❌ Failed to save task move:', error);
     }
   };
 
   const handleSyncStatusChange = (newSyncStatus) => {
     setSyncStatus(newSyncStatus);
-    
-    // If sync was just enabled and we have different data, reload
-    if (newSyncStatus.syncEnabled && newSyncStatus.status === 'connected') {
-      // Optionally reload data to get latest from cloud
-      // initializeApp();
-    }
   };
   
   const createInitialData = (date) => {
@@ -211,7 +319,7 @@ const App = () => {
       date.setDate(date.getDate() + i);
       const dateKey = formatDateKey(date);
       
-      if (!updatedTasks[dateKey] || updatedTasks[dateKey].length === 0) {
+      if (!updatedTasks[dateKey] || !Array.isArray(updatedTasks[dateKey]) || updatedTasks[dateKey].length === 0) {
         const dayOfWeek = date.getDay();
         updatedTasks[dateKey] = [];
         tasksAdded = true;
@@ -256,18 +364,20 @@ const App = () => {
       date.setDate(date.getDate() + i);
       daysOfWeek.push(date);
     }
-    <QuickGoogleTest />
-    return ( 
+    
+    return (
       <div className="week-view">
         <WeeklyBanner progress={weeklyProgress} tasks={tasks}/>
         <div className="days-grid">
           {daysOfWeek.map((date, index) => {
             const dateKey = formatDateKey(date);
+            const dayTasks = tasks[dateKey] || [];
+            
             return (
               <DayCard 
                 key={index} 
                 date={date} 
-                tasks={tasks[dateKey] || []} 
+                tasks={Array.isArray(dayTasks) ? dayTasks : []} 
                 onTaskUpdate={(taskIndex, updatedTask) => handleTaskUpdate(dateKey, taskIndex, updatedTask)}
                 onAddTask={() => handleAddTask(dateKey)}
                 onDeleteTask={(taskIndex) => handleDeleteTask(dateKey, taskIndex)}
@@ -324,6 +434,8 @@ const App = () => {
             </button>
           </div>
         </div>
+
+
 
         {/* Google Drive Sync Status */}
         <SyncStatusBanner onSyncStatusChange={handleSyncStatusChange} />

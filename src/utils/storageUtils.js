@@ -1,32 +1,124 @@
-// src/utils/storageUtils.js - Updated with Google Identity Services (GIS)
+// src/utils/storageUtils.js - BULLETPROOF version with global flags
 import GOOGLE_CONFIG from '../config/googleConfig';
 
 const STORAGE_KEY = 'productivity-calendar-data';
+const SYNC_STATE_KEY = 'productivity-calendar-sync-state';
 
-// Google Drive API wrapper using new Google Identity Services
+// GLOBAL FLAGS to prevent race conditions across ALL instances
+window.__SYNC_GLOBAL_STATE = window.__SYNC_GLOBAL_STATE || {
+  hasLoadedFromCloud: false,
+  isCurrentlyLoading: false,
+  isCurrentlySaving: false,
+  lastLoadTime: 0,
+  loadPromise: null
+};
+
+// Enhanced debug logging
+const debugLog = (message, data = null) => {
+  const timestamp = new Date().toLocaleTimeString();
+  console.log(`🔍 [${timestamp}] ${message}`, data);
+};
+
+// Google Drive API wrapper with bulletproof race condition protection
 class GoogleDriveSync {
   constructor() {
     this.isInitialized = false;
     this.isSignedIn = false;
     this.accessToken = null;
     this.tokenClient = null;
+    this.tokenExpiry = null;
+    
+    this.loadSyncState();
+  }
+
+  saveSyncState() {
+    try {
+      const syncState = {
+        isSignedIn: this.isSignedIn,
+        accessToken: this.accessToken,
+        tokenExpiry: this.tokenExpiry,
+        lastSyncTime: new Date().toISOString()
+      };
+      localStorage.setItem(SYNC_STATE_KEY, JSON.stringify(syncState));
+      debugLog('💾 Sync state saved');
+    } catch (error) {
+      console.error('Failed to save sync state:', error);
+    }
+  }
+
+  loadSyncState() {
+    try {
+      const savedState = localStorage.getItem(SYNC_STATE_KEY);
+      if (savedState) {
+        const syncState = JSON.parse(savedState);
+        
+        if (syncState.tokenExpiry && new Date(syncState.tokenExpiry) > new Date()) {
+          this.isSignedIn = syncState.isSignedIn;
+          this.accessToken = syncState.accessToken;
+          this.tokenExpiry = syncState.tokenExpiry;
+          debugLog('✅ Sync state restored from storage');
+        } else {
+          debugLog('⏰ Saved token expired, will need to re-authenticate');
+          this.clearSyncState();
+        }
+      }
+    } catch (error) {
+      console.error('Failed to load sync state:', error);
+      this.clearSyncState();
+    }
+  }
+
+  clearSyncState() {
+    this.isSignedIn = false;
+    this.accessToken = null;
+    this.tokenExpiry = null;
+    localStorage.removeItem(SYNC_STATE_KEY);
+    
+    // Reset global flags
+    window.__SYNC_GLOBAL_STATE.hasLoadedFromCloud = false;
+    window.__SYNC_GLOBAL_STATE.isCurrentlyLoading = false;
+    window.__SYNC_GLOBAL_STATE.lastLoadTime = 0;
+    
+    debugLog('🧹 Sync state cleared');
   }
 
   async initialize() {
     try {
-      console.log('🚀 Initializing Google Identity Services...');
+      debugLog('🚀 Initializing Google Identity Services...');
       
-      // Load Google Identity Services (GIS) - the new way
+      if (this.accessToken && this.isSignedIn) {
+        debugLog('🔄 Using saved access token...');
+        
+        if (!window.gapi) {
+          await this.loadGoogleAPI();
+        }
+
+        await new Promise((resolve) => {
+          window.gapi.load('client', resolve);
+        });
+
+        await window.gapi.client.init({
+          apiKey: GOOGLE_CONFIG.apiKey,
+          discoveryDocs: [GOOGLE_CONFIG.discoveryDoc]
+        });
+
+        window.gapi.client.setToken({
+          access_token: this.accessToken
+        });
+
+        debugLog('✅ Restored from saved token');
+        this.isInitialized = true;
+        return true;
+      }
+      
       if (!window.google) {
         await this.loadGoogleIdentityServices();
       }
 
-      // Load Google API client for Drive API calls
       if (!window.gapi) {
         await this.loadGoogleAPI();
       }
 
-      // Initialize GAPI client (for API calls, not auth)
       await new Promise((resolve) => {
         window.gapi.load('client', resolve);
       });
@@ -36,7 +128,6 @@ class GoogleDriveSync {
         discoveryDocs: [GOOGLE_CONFIG.discoveryDoc]
       });
 
-      // Initialize Google Identity Services token client
       this.tokenClient = window.google.accounts.oauth2.initTokenClient({
         client_id: GOOGLE_CONFIG.clientId,
         scope: GOOGLE_CONFIG.scopes,
@@ -48,12 +139,15 @@ class GoogleDriveSync {
           
           this.accessToken = response.access_token;
           this.isSignedIn = true;
-          console.log('✅ Successfully obtained access token');
+          this.tokenExpiry = new Date(Date.now() + 3600000).toISOString();
+          
+          this.saveSyncState();
+          debugLog('✅ Successfully obtained and saved access token');
         },
       });
 
       this.isInitialized = true;
-      console.log('✅ Google Identity Services initialized successfully');
+      debugLog('✅ Google Identity Services initialized successfully');
       return true;
     } catch (error) {
       console.error('❌ Failed to initialize Google Identity Services:', error);
@@ -90,10 +184,14 @@ class GoogleDriveSync {
       throw new Error('Google Identity Services not initialized');
     }
 
+    if (this.isSignedIn && this.accessToken) {
+      debugLog('✅ Already signed in with saved token');
+      return true;
+    }
+
     try {
-      console.log('🔐 Starting Google sign-in...');
+      debugLog('🔐 Starting Google sign-in...');
       
-      // Request access token using new GIS method
       return new Promise((resolve, reject) => {
         this.tokenClient.callback = (response) => {
           if (response.error) {
@@ -104,19 +202,19 @@ class GoogleDriveSync {
           
           this.accessToken = response.access_token;
           this.isSignedIn = true;
+          this.tokenExpiry = new Date(Date.now() + 3600000).toISOString();
           
-          // Set the access token for GAPI client
           window.gapi.client.setToken({
             access_token: this.accessToken
           });
           
-          console.log('✅ Sign-in successful');
+          this.saveSyncState();
+          debugLog('✅ Sign-in successful and state saved');
           resolve(true);
         };
         
-        // Trigger the sign-in flow
         this.tokenClient.requestAccessToken({
-          prompt: 'consent', // Force consent screen for testing
+          prompt: 'consent',
         });
       });
     } catch (error) {
@@ -129,18 +227,14 @@ class GoogleDriveSync {
     if (!this.isSignedIn) return false;
 
     try {
-      // Revoke the access token
       if (this.accessToken) {
         window.google.accounts.oauth2.revoke(this.accessToken);
       }
       
-      // Clear GAPI client token
       window.gapi.client.setToken(null);
+      this.clearSyncState();
       
-      this.accessToken = null;
-      this.isSignedIn = false;
-      
-      console.log('✅ Successfully signed out');
+      debugLog('✅ Successfully signed out and cleared state');
       return true;
     } catch (error) {
       console.error('❌ Sign-out failed:', error);
@@ -153,19 +247,37 @@ class GoogleDriveSync {
       throw new Error('Not signed in to Google Drive');
     }
 
+    // Prevent concurrent saves with global flag
+    if (window.__SYNC_GLOBAL_STATE.isCurrentlySaving) {
+      debugLog('⏳ Save already in progress globally, skipping...');
+      return false;
+    }
+
+    window.__SYNC_GLOBAL_STATE.isCurrentlySaving = true;
+
     try {
-      // Add timestamp to data
+      debugLog('💾 Starting save to Google Drive...', { 
+        taskCount: this.countTasks(data),
+        environment: window.process?.type ? 'desktop' : 'web'
+      });
+
+      // Validate data structure before saving
+      const validatedData = this.validateDataStructure(data);
+
       const dataWithTimestamp = {
-        ...data,
+        ...validatedData,
         lastSyncedAt: new Date().toISOString(),
-        syncedFrom: window.process?.type ? 'desktop' : 'web'
+        syncedFrom: window.process?.type ? 'desktop' : 'web',
+        syncVersion: '1.0.0',
+        localTimestamp: Date.now()
       };
 
       const existingFile = await this.findCalendarFile();
       const fileContent = JSON.stringify(dataWithTimestamp, null, 2);
 
       if (existingFile) {
-        // Update existing file using fetch (more reliable than gapi.client.request)
+        debugLog('📝 Updating existing file in Google Drive', { fileId: existingFile.id });
+        
         const response = await fetch(`https://www.googleapis.com/upload/drive/v3/files/${existingFile.id}?uploadType=media`, {
           method: 'PATCH',
           headers: {
@@ -176,12 +288,13 @@ class GoogleDriveSync {
         });
 
         if (!response.ok) {
-          throw new Error(`Failed to update file: ${response.statusText}`);
+          throw new Error(`Failed to update file: ${response.status} ${response.statusText}`);
         }
 
-        console.log('✅ Calendar data updated in Google Drive');
+        debugLog('✅ Calendar data updated in Google Drive');
       } else {
-        // Create new file using multipart upload
+        debugLog('📄 Creating new file in Google Drive');
+        
         const metadata = {
           name: GOOGLE_CONFIG.fileName,
           description: 'Productivity Calendar backup data'
@@ -200,52 +313,131 @@ class GoogleDriveSync {
         });
 
         if (!response.ok) {
-          throw new Error(`Failed to create file: ${response.statusText}`);
+          throw new Error(`Failed to create file: ${response.status} ${response.statusText}`);
         }
 
-        console.log('✅ Calendar data saved to Google Drive');
+        debugLog('✅ Calendar data saved to Google Drive (new file)');
       }
 
       return true;
     } catch (error) {
       console.error('❌ Failed to save to Google Drive:', error);
       throw error;
+    } finally {
+      window.__SYNC_GLOBAL_STATE.isCurrentlySaving = false;
     }
   }
 
+  // CRITICAL: Bulletproof load with global state management
   async loadFromCloud() {
     if (!this.isSignedIn || !this.accessToken) {
       throw new Error('Not signed in to Google Drive');
     }
 
-    try {
-      const file = await this.findCalendarFile();
+    // BULLETPROOF: Check global state to prevent multiple loads
+    const now = Date.now();
+    const timeSinceLastLoad = now - window.__SYNC_GLOBAL_STATE.lastLoadTime;
+    
+    if (window.__SYNC_GLOBAL_STATE.isCurrentlyLoading) {
+      debugLog('⏳ Load already in progress globally, waiting...');
       
-      if (!file) {
-        console.log('📄 No calendar data found in Google Drive');
-        return null;
+      // If there's a pending load promise, wait for it
+      if (window.__SYNC_GLOBAL_STATE.loadPromise) {
+        return await window.__SYNC_GLOBAL_STATE.loadPromise;
       }
-
-      // Download file content using fetch
-      const response = await fetch(`https://www.googleapis.com/drive/v3/files/${file.id}?alt=media`, {
-        headers: {
-          'Authorization': `Bearer ${this.accessToken}`,
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error(`Failed to download file: ${response.statusText}`);
-      }
-
-      const fileContent = await response.text();
-      const data = JSON.parse(fileContent);
       
-      console.log('✅ Calendar data loaded from Google Drive');
-      return data;
-    } catch (error) {
-      console.error('❌ Failed to load from Google Drive:', error);
-      throw error;
+      // Otherwise wait a bit and try again
+      await new Promise(resolve => setTimeout(resolve, 500));
+      return this.loadFromCloud();
     }
+    
+    // Prevent rapid successive loads (less than 2 seconds apart)
+    if (timeSinceLastLoad < 2000) {
+      debugLog('🚫 Load too soon after previous load, skipping...', { timeSinceLastLoad });
+      return null;
+    }
+
+    // Set global flags
+    window.__SYNC_GLOBAL_STATE.isCurrentlyLoading = true;
+    window.__SYNC_GLOBAL_STATE.lastLoadTime = now;
+
+    try {
+      debugLog('📥 Starting load from Google Drive...');
+      
+      // Create a promise that other calls can wait for
+      window.__SYNC_GLOBAL_STATE.loadPromise = this._performCloudLoad();
+      const result = await window.__SYNC_GLOBAL_STATE.loadPromise;
+      
+      return result;
+    } finally {
+      window.__SYNC_GLOBAL_STATE.isCurrentlyLoading = false;
+      window.__SYNC_GLOBAL_STATE.loadPromise = null;
+    }
+  }
+
+  async _performCloudLoad() {
+    const file = await this.findCalendarFile();
+    
+    if (!file) {
+      debugLog('📄 No calendar data found in Google Drive');
+      return null;
+    }
+
+    debugLog('📁 Found calendar file in Google Drive', { fileId: file.id, name: file.name });
+
+    const response = await fetch(`https://www.googleapis.com/drive/v3/files/${file.id}?alt=media`, {
+      headers: {
+        'Authorization': `Bearer ${this.accessToken}`,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to download file: ${response.status} ${response.statusText}`);
+    }
+
+    const fileContent = await response.text();
+    const data = JSON.parse(fileContent);
+    
+    // Validate the loaded data
+    const validatedData = this.validateDataStructure(data);
+    
+    debugLog('✅ Calendar data loaded from Google Drive', {
+      taskCount: this.countTasks(validatedData),
+      lastSynced: data.lastSyncedAt,
+      syncedFrom: data.syncedFrom,
+      localTimestamp: data.localTimestamp
+    });
+    
+    return validatedData;
+  }
+
+  validateDataStructure(data) {
+    if (!data || typeof data !== 'object') {
+      debugLog('⚠️ Invalid data structure, returning empty object');
+      return {};
+    }
+
+    const validatedData = {};
+    
+    // Remove metadata first
+    const { lastSyncedAt, syncedFrom, localTimestamp, syncVersion, ...taskData } = data;
+    
+    Object.keys(taskData).forEach(dateKey => {
+      const dayData = taskData[dateKey];
+      
+      if (Array.isArray(dayData)) {
+        validatedData[dateKey] = dayData.filter(task => 
+          task && typeof task === 'object' && task.id
+        );
+      } else if (dayData === null || dayData === undefined) {
+        // Skip null/undefined entries
+      } else {
+        debugLog('⚠️ Fixing invalid day data structure for', dateKey);
+        validatedData[dateKey] = [];
+      }
+    });
+    
+    return validatedData;
   }
 
   async findCalendarFile() {
@@ -263,17 +455,34 @@ class GoogleDriveSync {
     }
   }
 
+  countTasks(data) {
+    if (!data || typeof data !== 'object') return 0;
+    
+    let count = 0;
+    Object.keys(data).forEach(key => {
+      if (Array.isArray(data[key])) {
+        count += data[key].length;
+      }
+    });
+    return count;
+  }
+
   getSignInStatus() {
     return {
       isInitialized: this.isInitialized,
       isSignedIn: this.isSignedIn,
-      userEmail: null, // GIS doesn't provide profile info by default
-      hasAccessToken: !!this.accessToken
+      userEmail: null,
+      hasAccessToken: !!this.accessToken,
+      tokenExpiry: this.tokenExpiry,
+      isCurrentlySaving: window.__SYNC_GLOBAL_STATE.isCurrentlySaving,
+      isCurrentlyLoading: window.__SYNC_GLOBAL_STATE.isCurrentlyLoading,
+      hasLoadedFromCloud: window.__SYNC_GLOBAL_STATE.hasLoadedFromCloud,
+      lastLoadTime: window.__SYNC_GLOBAL_STATE.lastLoadTime
     };
   }
 }
 
-// Enhanced storage manager (same as before, but uses new GoogleDriveSync)
+// BULLETPROOF storage manager with global state management
 class HybridStorageManager {
   constructor() {
     this.googleDrive = new GoogleDriveSync();
@@ -284,12 +493,17 @@ class HybridStorageManager {
 
   async initialize() {
     try {
+      debugLog('🔧 Initializing storage manager...');
+      
       const success = await this.googleDrive.initialize();
+      
       if (success && this.googleDrive.isSignedIn) {
         this.syncEnabled = true;
         this.syncStatus = 'connected';
         this.lastSyncTime = new Date();
+        debugLog('✅ Restored previous sync session');
       }
+      
       return success;
     } catch (error) {
       console.error('Storage initialization failed:', error);
@@ -299,16 +513,20 @@ class HybridStorageManager {
 
   async enableSync() {
     try {
+      debugLog('🔗 Enabling sync...');
       this.syncStatus = 'connecting';
+      
       const success = await this.googleDrive.signIn();
       
       if (success) {
         this.syncEnabled = true;
         this.syncStatus = 'connected';
         await this.performInitialSync();
+        debugLog('✅ Sync enabled successfully');
         return true;
       } else {
         this.syncStatus = 'disconnected';
+        debugLog('❌ Failed to enable sync');
         return false;
       }
     } catch (error) {
@@ -320,9 +538,11 @@ class HybridStorageManager {
 
   async disableSync() {
     try {
+      debugLog('🔗 Disabling sync...');
       await this.googleDrive.signOut();
       this.syncEnabled = false;
       this.syncStatus = 'disconnected';
+      debugLog('✅ Sync disabled successfully');
       return true;
     } catch (error) {
       console.error('Failed to disable sync:', error);
@@ -332,24 +552,46 @@ class HybridStorageManager {
 
   async performInitialSync() {
     try {
+      debugLog('🔄 Performing initial sync...');
       this.syncStatus = 'syncing';
       
       const localData = this.loadLocalData();
       let cloudData = null;
       
-      try {
-        cloudData = await this.googleDrive.loadFromCloud();
-      } catch (error) {
-        console.log('No cloud data found, using local data');
+      // Only load from cloud if we haven't already done so
+      if (!window.__SYNC_GLOBAL_STATE.hasLoadedFromCloud) {
+        try {
+          cloudData = await this.googleDrive.loadFromCloud();
+          window.__SYNC_GLOBAL_STATE.hasLoadedFromCloud = true;
+        } catch (error) {
+          debugLog('📄 No cloud data found, will upload local data');
+          window.__SYNC_GLOBAL_STATE.hasLoadedFromCloud = true; // Don't keep trying
+        }
+      } else {
+        debugLog('✅ Already loaded from cloud, skipping cloud load');
       }
 
+      const localTaskCount = this.googleDrive.countTasks(localData);
+      const cloudTaskCount = this.googleDrive.countTasks(cloudData);
+      
+      debugLog('📊 Initial sync comparison', {
+        local: localTaskCount,
+        cloud: cloudTaskCount,
+        hasLoadedFromCloud: window.__SYNC_GLOBAL_STATE.hasLoadedFromCloud
+      });
+
       if (cloudData && localData) {
-        const mergedData = this.mergeData(localData, cloudData);
-        await this.saveData(mergedData);
+        const mergedData = this.intelligentMerge(localData, cloudData);
+        this.saveLocalData(mergedData);
+        debugLog('✅ Data merged intelligently');
       } else if (localData && !cloudData) {
         await this.googleDrive.saveToCloud(localData);
+        debugLog('✅ Local data uploaded to cloud');
       } else if (cloudData && !localData) {
         this.saveLocalData(cloudData);
+        debugLog('✅ Cloud data downloaded locally');
+      } else {
+        debugLog('ℹ️ No data found in either location');
       }
 
       this.syncStatus = 'connected';
@@ -361,53 +603,126 @@ class HybridStorageManager {
     }
   }
 
-  mergeData(localData, cloudData) {
-    const localTimestamp = localData.lastSyncedAt ? new Date(localData.lastSyncedAt) : new Date(0);
-    const cloudTimestamp = cloudData.lastSyncedAt ? new Date(cloudData.lastSyncedAt) : new Date(0);
+  intelligentMerge(localData, cloudData) {
+    debugLog('🧠 Performing intelligent merge...');
     
-    if (cloudTimestamp > localTimestamp) {
-      console.log('Using cloud data (more recent)');
-      return cloudData;
-    } else {
-      console.log('Using local data (more recent)');
-      return localData;
+    const localTime = localData?.localTimestamp || 
+                      (localData?.lastSyncedAt ? new Date(localData.lastSyncedAt).getTime() : 0);
+    const cloudTime = cloudData?.localTimestamp || 
+                      (cloudData?.lastSyncedAt ? new Date(cloudData.lastSyncedAt).getTime() : 0);
+    
+    const localTaskCount = this.googleDrive.countTasks(localData);
+    const cloudTaskCount = this.googleDrive.countTasks(cloudData);
+    
+    debugLog('🔍 Merge analysis', {
+      local: { count: localTaskCount, timestamp: localTime },
+      cloud: { count: cloudTaskCount, timestamp: cloudTime }
+    });
+    
+    const timeDiff = Math.abs(localTime - cloudTime);
+    if (timeDiff > 10000) {
+      if (localTime > cloudTime) {
+        debugLog('✅ Using local data (significantly newer)');
+        return localData;
+      } else {
+        debugLog('✅ Using cloud data (significantly newer)');
+        return cloudData;
+      }
     }
+    
+    if (localTaskCount > cloudTaskCount) {
+      debugLog('✅ Using local data (more tasks)');
+      return localData;
+    } else if (cloudTaskCount > localTaskCount) {
+      debugLog('✅ Using cloud data (more tasks)');
+      return cloudData;
+    }
+    
+    debugLog('✅ Using local data (same task count, prefer local)');
+    return localData;
   }
 
   async saveData(data) {
     try {
-      this.saveLocalData(data);
+      debugLog('💾 Saving data...', { 
+        taskCount: this.googleDrive.countTasks(data),
+        syncEnabled: this.syncEnabled,
+        hasLoadedFromCloud: window.__SYNC_GLOBAL_STATE.hasLoadedFromCloud
+      });
+      
+      const dataWithTimestamp = {
+        ...data,
+        localTimestamp: Date.now()
+      };
+      
+      this.saveLocalData(dataWithTimestamp);
+      debugLog('✅ Data saved locally with timestamp');
       
       if (this.syncEnabled && this.googleDrive.isSignedIn) {
+        debugLog('☁️ Syncing to Google Drive...');
         this.syncStatus = 'syncing';
-        await this.googleDrive.saveToCloud(data);
-        this.syncStatus = 'connected';
-        this.lastSyncTime = new Date();
+        
+        try {
+          await this.googleDrive.saveToCloud(dataWithTimestamp);
+          this.syncStatus = 'connected';
+          this.lastSyncTime = new Date();
+          debugLog('✅ Data synced to Google Drive successfully');
+        } catch (error) {
+          console.error('❌ Cloud sync failed:', error);
+          this.syncStatus = 'error';
+        }
+      } else {
+        debugLog('⚠️ Sync not enabled, only saved locally');
       }
       
       return true;
     } catch (error) {
       console.error('Save failed:', error);
-      this.syncStatus = 'error';
       return false;
     }
   }
 
+  // CRITICAL: Only load from cloud once, then use local data
   async loadData() {
     try {
-      if (this.syncEnabled && this.googleDrive.isSignedIn) {
+      debugLog('📥 Loading data...', {
+        syncEnabled: this.syncEnabled,
+        hasLoadedFromCloud: window.__SYNC_GLOBAL_STATE.hasLoadedFromCloud,
+        isCurrentlyLoading: window.__SYNC_GLOBAL_STATE.isCurrentlyLoading
+      });
+      
+      // If sync is enabled but we haven't loaded from cloud yet, do initial load
+      if (this.syncEnabled && this.googleDrive.isSignedIn && !window.__SYNC_GLOBAL_STATE.hasLoadedFromCloud) {
         try {
+          debugLog('🌥️ First-time cloud load...');
           const cloudData = await this.googleDrive.loadFromCloud();
+          
           if (cloudData) {
-            this.saveLocalData(cloudData);
-            return cloudData;
+            window.__SYNC_GLOBAL_STATE.hasLoadedFromCloud = true;
+            
+            const localData = this.loadLocalData();
+            if (localData) {
+              const mergedData = this.intelligentMerge(localData, cloudData);
+              this.saveLocalData(mergedData);
+              debugLog('✅ Loaded from cloud and merged with local data');
+              return mergedData;
+            } else {
+              this.saveLocalData(cloudData);
+              debugLog('✅ Loaded from cloud (no local data)');
+              return cloudData;
+            }
           }
         } catch (error) {
-          console.warn('Cloud load failed, falling back to local data:', error);
+          debugLog('⚠️ Cloud load failed, using local data', error.message);
+          window.__SYNC_GLOBAL_STATE.hasLoadedFromCloud = true;
         }
       }
       
-      return this.loadLocalData();
+      const localData = this.loadLocalData();
+      debugLog('📱 Using local storage data', { 
+        taskCount: this.googleDrive.countTasks(localData)
+      });
+      return localData;
     } catch (error) {
       console.error('Load failed:', error);
       return null;
@@ -443,7 +758,35 @@ class HybridStorageManager {
     };
   }
 
-  // Legacy functions for backward compatibility
+  // Force a fresh load from cloud (for debug purposes)
+  async forceCloudLoad() {
+    if (this.syncEnabled && this.googleDrive.isSignedIn) {
+      try {
+        debugLog('🔄 Forcing fresh load from cloud...');
+        
+        // Temporarily bypass the global flag
+        const wasLoaded = window.__SYNC_GLOBAL_STATE.hasLoadedFromCloud;
+        window.__SYNC_GLOBAL_STATE.hasLoadedFromCloud = false;
+        window.__SYNC_GLOBAL_STATE.lastLoadTime = 0;
+        
+        const cloudData = await this.googleDrive.loadFromCloud();
+        
+        if (cloudData) {
+          this.saveLocalData(cloudData);
+          debugLog('✅ Force loaded from cloud');
+          return cloudData;
+        }
+        
+        // Restore flag if no data found
+        window.__SYNC_GLOBAL_STATE.hasLoadedFromCloud = wasLoaded;
+      } catch (error) {
+        debugLog('❌ Force cloud load failed', error.message);
+      }
+    }
+    return null;
+  }
+
+  // Legacy functions
   async exportData() {
     try {
       const data = await this.loadData();
@@ -522,7 +865,6 @@ export const importData = async (file) => {
   return storageManager.importData(file);
 };
 
-// Export new sync functions
 export const enableGoogleSync = async () => {
   await ensureInitialized();
   return storageManager.enableSync();
