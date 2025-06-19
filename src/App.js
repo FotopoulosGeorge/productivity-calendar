@@ -1,4 +1,4 @@
-// src/App.js - Fixed with data validation and single load
+// src/App.js 
 import React, { useState, useEffect, useCallback } from 'react';
 import { Calendar } from 'lucide-react';
 import WeeklyBanner from './components/WeeklyBanner';
@@ -8,8 +8,6 @@ import { getStartOfWeek, formatDateKey} from './utils/dateUtils';
 import { loadData, saveData } from './utils/storageUtils';
 import { generateTaskId, deepCloneTask, createRecurringTask } from './utils/taskUtils';
 import './styles/App.css';
-import './styles/components/SyncStatusBanner.css';
-
 
 const App = () => {
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -366,7 +364,8 @@ const App = () => {
       date.setDate(date.getDate() + i);
       daysOfWeek.push(date);
     }
-    return ( 
+    
+    return (
       <div className="week-view">
         <WeeklyBanner progress={weeklyProgress} tasks={tasks}/>
         <div className="days-grid">
@@ -435,7 +434,6 @@ const App = () => {
             </button>
           </div>
         </div>
-
 
 
         {/* Google Drive Sync Status */}
