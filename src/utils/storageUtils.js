@@ -5,7 +5,7 @@ const STORAGE_KEY = 'productivity-calendar-data';
 const SYNC_STATE_KEY = 'productivity-calendar-sync-state';
 
 // GLOBAL FLAGS to prevent race conditions across ALL instances
-window.__SYNC_GLOBAL_STATE = window.__SYNC_GLOBAL_STATE || {
+window.__PRODUCTIVITY_CALENDAR_SYNC__ = window.__PRODUCTIVITY_CALENDAR_SYNC__ || {
   hasLoadedFromCloud: false,
   isCurrentlyLoading: false,
   isCurrentlySaving: false,
@@ -75,9 +75,9 @@ class GoogleDriveSync {
     localStorage.removeItem(SYNC_STATE_KEY);
     
     // Reset global flags
-    window.__SYNC_GLOBAL_STATE.hasLoadedFromCloud = false;
-    window.__SYNC_GLOBAL_STATE.isCurrentlyLoading = false;
-    window.__SYNC_GLOBAL_STATE.lastLoadTime = 0;
+    window.__PRODUCTIVITY_CALENDAR_SYNC__.hasLoadedFromCloud = false;
+    window.__PRODUCTIVITY_CALENDAR_SYNC__.isCurrentlyLoading = false;
+    window.__PRODUCTIVITY_CALENDAR_SYNC__.lastLoadTime = 0;
     
     debugLog('🧹 Sync state cleared');
   }
@@ -248,12 +248,12 @@ class GoogleDriveSync {
     }
 
     // Prevent concurrent saves with global flag
-    if (window.__SYNC_GLOBAL_STATE.isCurrentlySaving) {
+    if (window.__PRODUCTIVITY_CALENDAR_SYNC__.isCurrentlySaving) {
       debugLog('⏳ Save already in progress globally, skipping...');
       return false;
     }
 
-    window.__SYNC_GLOBAL_STATE.isCurrentlySaving = true;
+    window.__PRODUCTIVITY_CALENDAR_SYNC__.isCurrentlySaving = true;
 
     try {
       debugLog('💾 Starting save to Google Drive...', { 
@@ -324,7 +324,7 @@ class GoogleDriveSync {
       console.error('❌ Failed to save to Google Drive:', error);
       throw error;
     } finally {
-      window.__SYNC_GLOBAL_STATE.isCurrentlySaving = false;
+      window.__PRODUCTIVITY_CALENDAR_SYNC__.isCurrentlySaving = false;
     }
   }
 
@@ -336,14 +336,14 @@ class GoogleDriveSync {
 
     // BULLETPROOF: Check global state to prevent multiple loads
     const now = Date.now();
-    const timeSinceLastLoad = now - window.__SYNC_GLOBAL_STATE.lastLoadTime;
+    const timeSinceLastLoad = now - window.__PRODUCTIVITY_CALENDAR_SYNC__.lastLoadTime;
     
-    if (window.__SYNC_GLOBAL_STATE.isCurrentlyLoading) {
+    if (window.__PRODUCTIVITY_CALENDAR_SYNC__.isCurrentlyLoading) {
       debugLog('⏳ Load already in progress globally, waiting...');
       
       // If there's a pending load promise, wait for it
-      if (window.__SYNC_GLOBAL_STATE.loadPromise) {
-        return await window.__SYNC_GLOBAL_STATE.loadPromise;
+      if (window.__PRODUCTIVITY_CALENDAR_SYNC__.loadPromise) {
+        return await window.__PRODUCTIVITY_CALENDAR_SYNC__.loadPromise;
       }
       
       // Otherwise wait a bit and try again
@@ -358,20 +358,20 @@ class GoogleDriveSync {
     }
 
     // Set global flags
-    window.__SYNC_GLOBAL_STATE.isCurrentlyLoading = true;
-    window.__SYNC_GLOBAL_STATE.lastLoadTime = now;
+    window.__PRODUCTIVITY_CALENDAR_SYNC__.isCurrentlyLoading = true;
+    window.__PRODUCTIVITY_CALENDAR_SYNC__.lastLoadTime = now;
 
     try {
       debugLog('📥 Starting load from Google Drive...');
       
       // Create a promise that other calls can wait for
-      window.__SYNC_GLOBAL_STATE.loadPromise = this._performCloudLoad();
-      const result = await window.__SYNC_GLOBAL_STATE.loadPromise;
+      window.__PRODUCTIVITY_CALENDAR_SYNC__.loadPromise = this._performCloudLoad();
+      const result = await window.__PRODUCTIVITY_CALENDAR_SYNC__.loadPromise;
       
       return result;
     } finally {
-      window.__SYNC_GLOBAL_STATE.isCurrentlyLoading = false;
-      window.__SYNC_GLOBAL_STATE.loadPromise = null;
+      window.__PRODUCTIVITY_CALENDAR_SYNC__.isCurrentlyLoading = false;
+      window.__PRODUCTIVITY_CALENDAR_SYNC__.loadPromise = null;
     }
   }
 
@@ -474,10 +474,10 @@ class GoogleDriveSync {
       userEmail: null,
       hasAccessToken: !!this.accessToken,
       tokenExpiry: this.tokenExpiry,
-      isCurrentlySaving: window.__SYNC_GLOBAL_STATE.isCurrentlySaving,
-      isCurrentlyLoading: window.__SYNC_GLOBAL_STATE.isCurrentlyLoading,
-      hasLoadedFromCloud: window.__SYNC_GLOBAL_STATE.hasLoadedFromCloud,
-      lastLoadTime: window.__SYNC_GLOBAL_STATE.lastLoadTime
+      isCurrentlySaving: window.__PRODUCTIVITY_CALENDAR_SYNC__.isCurrentlySaving,
+      isCurrentlyLoading: window.__PRODUCTIVITY_CALENDAR_SYNC__.isCurrentlyLoading,
+      hasLoadedFromCloud: window.__PRODUCTIVITY_CALENDAR_SYNC__.hasLoadedFromCloud,
+      lastLoadTime: window.__PRODUCTIVITY_CALENDAR_SYNC__.lastLoadTime
     };
   }
 }
@@ -559,13 +559,13 @@ class HybridStorageManager {
       let cloudData = null;
       
       // Only load from cloud if we haven't already done so
-      if (!window.__SYNC_GLOBAL_STATE.hasLoadedFromCloud) {
+      if (!window.__PRODUCTIVITY_CALENDAR_SYNC__.hasLoadedFromCloud) {
         try {
           cloudData = await this.googleDrive.loadFromCloud();
-          window.__SYNC_GLOBAL_STATE.hasLoadedFromCloud = true;
+          window.__PRODUCTIVITY_CALENDAR_SYNC__.hasLoadedFromCloud = true;
         } catch (error) {
           debugLog('📄 No cloud data found, will upload local data');
-          window.__SYNC_GLOBAL_STATE.hasLoadedFromCloud = true; // Don't keep trying
+          window.__PRODUCTIVITY_CALENDAR_SYNC__.hasLoadedFromCloud = true; // Don't keep trying
         }
       } else {
         debugLog('✅ Already loaded from cloud, skipping cloud load');
@@ -577,7 +577,7 @@ class HybridStorageManager {
       debugLog('📊 Initial sync comparison', {
         local: localTaskCount,
         cloud: cloudTaskCount,
-        hasLoadedFromCloud: window.__SYNC_GLOBAL_STATE.hasLoadedFromCloud
+        hasLoadedFromCloud: window.__PRODUCTIVITY_CALENDAR_SYNC__.hasLoadedFromCloud
       });
 
       if (cloudData && localData) {
@@ -774,7 +774,7 @@ class HybridStorageManager {
       debugLog('💾 Saving data...', { 
         taskCount: this.googleDrive.countTasks(data),
         syncEnabled: this.syncEnabled,
-        hasLoadedFromCloud: window.__SYNC_GLOBAL_STATE.hasLoadedFromCloud
+        hasLoadedFromCloud: window.__PRODUCTIVITY_CALENDAR_SYNC__.hasLoadedFromCloud
       });
       
       const dataWithTimestamp = {
@@ -814,18 +814,18 @@ class HybridStorageManager {
     try {
       debugLog('📥 Loading data...', {
         syncEnabled: this.syncEnabled,
-        hasLoadedFromCloud: window.__SYNC_GLOBAL_STATE.hasLoadedFromCloud,
-        isCurrentlyLoading: window.__SYNC_GLOBAL_STATE.isCurrentlyLoading
+        hasLoadedFromCloud: window.__PRODUCTIVITY_CALENDAR_SYNC__.hasLoadedFromCloud,
+        isCurrentlyLoading: window.__PRODUCTIVITY_CALENDAR_SYNC__.isCurrentlyLoading
       });
       
       // If sync is enabled but we haven't loaded from cloud yet, do initial load
-      if (this.syncEnabled && this.googleDrive.isSignedIn && !window.__SYNC_GLOBAL_STATE.hasLoadedFromCloud) {
+      if (this.syncEnabled && this.googleDrive.isSignedIn && !window.__PRODUCTIVITY_CALENDAR_SYNC__.hasLoadedFromCloud) {
         try {
           debugLog('🌥️ First-time cloud load...');
           const cloudData = await this.googleDrive.loadFromCloud();
           
           if (cloudData) {
-            window.__SYNC_GLOBAL_STATE.hasLoadedFromCloud = true;
+            window.__PRODUCTIVITY_CALENDAR_SYNC__.hasLoadedFromCloud = true;
             
             const localData = this.loadLocalData();
             if (localData) {
@@ -841,7 +841,7 @@ class HybridStorageManager {
           }
         } catch (error) {
           debugLog('⚠️ Cloud load failed, using local data', error.message);
-          window.__SYNC_GLOBAL_STATE.hasLoadedFromCloud = true;
+          window.__PRODUCTIVITY_CALENDAR_SYNC__.hasLoadedFromCloud = true;
         }
       }
       
@@ -892,9 +892,9 @@ class HybridStorageManager {
         debugLog('🔄 Forcing fresh load from cloud...');
         
         // Temporarily bypass the global flag
-        const wasLoaded = window.__SYNC_GLOBAL_STATE.hasLoadedFromCloud;
-        window.__SYNC_GLOBAL_STATE.hasLoadedFromCloud = false;
-        window.__SYNC_GLOBAL_STATE.lastLoadTime = 0;
+        const wasLoaded = window.__PRODUCTIVITY_CALENDAR_SYNC__.hasLoadedFromCloud;
+        window.__PRODUCTIVITY_CALENDAR_SYNC__.hasLoadedFromCloud = false;
+        window.__PRODUCTIVITY_CALENDAR_SYNC__.lastLoadTime = 0;
         
         const cloudData = await this.googleDrive.loadFromCloud();
         
@@ -904,7 +904,7 @@ class HybridStorageManager {
         }
         
         // Restore flag if no data found
-        window.__SYNC_GLOBAL_STATE.hasLoadedFromCloud = wasLoaded;
+        window.__PRODUCTIVITY_CALENDAR_SYNC__.hasLoadedFromCloud = wasLoaded;
       } catch (error) {
         debugLog('❌ Force cloud load failed', error.message);
       }
