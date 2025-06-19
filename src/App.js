@@ -9,7 +9,7 @@ import { loadData, saveData } from './utils/storageUtils';
 import { generateTaskId, deepCloneTask, createRecurringTask } from './utils/taskUtils';
 import './styles/App.css';
 import './styles/components/SyncStatusBanner.css';
-import QuickGoogleTest from './components/QuickGoogleTest';
+
 
 const App = () => {
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -366,7 +366,6 @@ const App = () => {
       date.setDate(date.getDate() + i);
       daysOfWeek.push(date);
     }
-    <QuickGoogleTest />
     return ( 
       <div className="week-view">
         <WeeklyBanner progress={weeklyProgress} tasks={tasks}/>
