@@ -6,11 +6,16 @@ const SYNC_STATE_KEY = 'productivity-calendar-sync-state';
 
 // GLOBAL FLAGS to prevent race conditions across ALL instances
 window.__PRODUCTIVITY_CALENDAR_SYNC__ = window.__PRODUCTIVITY_CALENDAR_SYNC__ || {
-  hasLoadedFromCloud: false,
+  cloudLoadState: 'never-attempted', // 'never-attempted' | 'loading' | 'success' | 'failed' | 'network-error' | 'auth-error'
   isCurrentlyLoading: false,
   isCurrentlySaving: false,
   lastLoadTime: 0,
-  loadPromise: null
+  loadPromise: null,
+  lastSuccessfulLoad: 0,
+  lastFailedLoad: 0,
+  failureCount: 0,
+  tokenValidatedAt: 0,
+  retryAfter: 0 // Timestamp when retry is allowed
 };
 
 // Enhanced debug logging
@@ -333,7 +338,11 @@ class GoogleDriveSync {
     if (!this.isSignedIn || !this.accessToken) {
       throw new Error('Not signed in to Google Drive');
     }
-
+    // Check if we can retry
+    if (!this.canRetryCloudOperation()) {
+      const globalState = window.__PRODUCTIVITY_CALENDAR_SYNC__;
+      throw new Error(`Cloud load blocked due to previous failures. Retry after ${new Date(globalState.retryAfter).toLocaleTimeString()}`);
+    }
     // BULLETPROOF: Check global state to prevent multiple loads
     const now = Date.now();
     const timeSinceLastLoad = now - window.__PRODUCTIVITY_CALENDAR_SYNC__.lastLoadTime;
@@ -356,7 +365,7 @@ class GoogleDriveSync {
       debugLog('🚫 Load too soon after previous load, skipping...', { timeSinceLastLoad });
       return null;
     }
-
+    this.setCloudState('loading');
     // Set global flags
     window.__PRODUCTIVITY_CALENDAR_SYNC__.isCurrentlyLoading = true;
     window.__PRODUCTIVITY_CALENDAR_SYNC__.lastLoadTime = now;
@@ -367,8 +376,30 @@ class GoogleDriveSync {
       // Create a promise that other calls can wait for
       window.__PRODUCTIVITY_CALENDAR_SYNC__.loadPromise = this._performCloudLoad();
       const result = await window.__PRODUCTIVITY_CALENDAR_SYNC__.loadPromise;
-      
+      // SUCCESS: Update state only on actual success
+      if (result !== null) {
+        this.setCloudState('success');
+        debugLog('✅ Cloud load successful');
+      } else {
+        // No data found is not a failure, it's a valid state
+        this.setCloudState('success');
+        debugLog('📄 No cloud data found (valid state)');
+      }
       return result;
+    } catch (error) {
+      // FAILURE: Categorize the error and set appropriate state
+      if (error.message.includes('401') || error.message.includes('403')) {
+        this.setCloudState('auth-error', error);
+        debugLog('🔐 Authentication error during cloud load');
+      } else if (error.message.includes('network') || error.message.includes('fetch')) {
+        this.setCloudState('network-error', error);
+        debugLog('🌐 Network error during cloud load');
+      } else {
+        this.setCloudState('failed', error);
+        debugLog('❌ Cloud load failed');
+      }
+
+      throw error; // Re-throw so caller can handle
     } finally {
       window.__PRODUCTIVITY_CALENDAR_SYNC__.isCurrentlyLoading = false;
       window.__PRODUCTIVITY_CALENDAR_SYNC__.loadPromise = null;
@@ -480,6 +511,78 @@ class GoogleDriveSync {
       lastLoadTime: window.__PRODUCTIVITY_CALENDAR_SYNC__.lastLoadTime
     };
   }
+  
+  getCloudState() {
+    return window.__PRODUCTIVITY_CALENDAR_SYNC__.cloudLoadState;
+  }
+
+  setCloudState(newState, error = null) {
+    const now = Date.now();
+    const globalState = window.__PRODUCTIVITY_CALENDAR_SYNC__;
+    
+    debugLog(`🔄 Cloud state: ${globalState.cloudLoadState} → ${newState}`);
+    
+    globalState.cloudLoadState = newState;
+    
+    switch (newState) {
+      case 'success':
+        globalState.lastSuccessfulLoad = now;
+        globalState.failureCount = 0;
+        globalState.retryAfter = 0;
+        break;
+        
+      case 'failed':
+      case 'network-error':
+      case 'auth-error':
+        globalState.lastFailedLoad = now;
+        globalState.failureCount++;
+        // Exponential backoff: 30s, 1m, 2m, 5m, 10m (max)
+        const backoffMs = Math.min(30000 * Math.pow(2, globalState.failureCount - 1), 600000);
+        globalState.retryAfter = now + backoffMs;
+        debugLog(`⏰ Retry allowed after: ${new Date(globalState.retryAfter).toLocaleTimeString()}`);
+        break;
+        
+      case 'loading':
+        // Don't change failure counters during loading
+        break;
+    }
+  }
+
+  canRetryCloudOperation() {
+    const globalState = window.__PRODUCTIVITY_CALENDAR_SYNC__;
+    const now = Date.now();
+    
+    // Always allow if never attempted or if it's been successful before
+    if (globalState.cloudLoadState === 'never-attempted' || globalState.cloudLoadState === 'success') {
+      return true;
+    }
+    
+    // Check if retry cooldown has passed
+    if (globalState.retryAfter && now < globalState.retryAfter) {
+      debugLog(`⏳ Retry blocked for ${Math.round((globalState.retryAfter - now) / 1000)}s`);
+      return false;
+    }
+    
+    // Prevent infinite retries (max 5 failures)
+    if (globalState.failureCount >= 5) {
+      debugLog('🚫 Max failures reached, manual intervention required');
+      return false;
+    }
+    
+    return true;
+  }
+
+  // Reset failure count when user manually intervenes
+  resetCloudState() {
+    debugLog('🔄 Manually resetting cloud state');
+    const globalState = window.__PRODUCTIVITY_CALENDAR_SYNC__;
+    globalState.cloudLoadState = 'never-attempted';
+    globalState.failureCount = 0;
+    globalState.retryAfter = 0;
+    globalState.lastFailedLoad = 0;
+  }
+
+
 }
 
 // BULLETPROOF storage manager with SAFE merge logic
@@ -557,28 +660,39 @@ class HybridStorageManager {
       
       const localData = this.loadLocalData();
       let cloudData = null;
-      
-      // Only load from cloud if we haven't already done so
-      if (!window.__PRODUCTIVITY_CALENDAR_SYNC__.hasLoadedFromCloud) {
-        try {
-          cloudData = await this.googleDrive.loadFromCloud();
-          window.__PRODUCTIVITY_CALENDAR_SYNC__.hasLoadedFromCloud = true;
-        } catch (error) {
-          debugLog('📄 No cloud data found, will upload local data');
-          window.__PRODUCTIVITY_CALENDAR_SYNC__.hasLoadedFromCloud = true; // Don't keep trying
+      // Only load from cloud based on proper state management
+      const cloudState = this.googleDrive.getCloudState();
+
+      if (cloudState === 'never-attempted' || cloudState === 'failed') {
+        // Only attempt if we haven't succeeded or if failure cooldown has passed
+        if (this.googleDrive.canRetryCloudOperation()) {
+          try {
+            debugLog('🌥️ Attempting cloud load for initial sync...');
+            cloudData = await this.googleDrive.loadFromCloud();
+            debugLog('✅ Cloud data loaded for initial sync');
+          } catch (error) {
+            debugLog('⚠️ Cloud load failed during initial sync', error.message);
+            // Don't throw - gracefully continue with local data only
+            // The error state is already set by loadFromCloud()
+          }
+        } else {
+          debugLog('🚫 Cloud load blocked by retry policy, using local data only');
         }
+      } else if (cloudState === 'success') {
+        debugLog('✅ Cloud already loaded successfully, skipping reload');
       } else {
-        debugLog('✅ Already loaded from cloud, skipping cloud load');
+        debugLog(`⏳ Cloud in state: ${cloudState}, skipping load`);
       }
 
       const localTaskCount = this.googleDrive.countTasks(localData);
       const cloudTaskCount = this.googleDrive.countTasks(cloudData);
-      
+
       debugLog('📊 Initial sync comparison', {
         local: localTaskCount,
         cloud: cloudTaskCount,
-        hasLoadedFromCloud: window.__PRODUCTIVITY_CALENDAR_SYNC__.hasLoadedFromCloud
+        cloudState: this.googleDrive.getCloudState()
       });
+
 
       if (cloudData && localData) {
         const mergedData = this.safeMerge(localData, cloudData);
@@ -814,40 +928,50 @@ class HybridStorageManager {
     try {
       debugLog('📥 Loading data...', {
         syncEnabled: this.syncEnabled,
-        hasLoadedFromCloud: window.__PRODUCTIVITY_CALENDAR_SYNC__.hasLoadedFromCloud,
+        cloudState: this.googleDrive.getCloudState(),
         isCurrentlyLoading: window.__PRODUCTIVITY_CALENDAR_SYNC__.isCurrentlyLoading
       });
-      
-      // If sync is enabled but we haven't loaded from cloud yet, do initial load
-      if (this.syncEnabled && this.googleDrive.isSignedIn && !window.__PRODUCTIVITY_CALENDAR_SYNC__.hasLoadedFromCloud) {
-        try {
-          debugLog('🌥️ First-time cloud load...');
-          const cloudData = await this.googleDrive.loadFromCloud();
+
+      // If sync is enabled and we should try cloud load
+      if (this.syncEnabled && this.googleDrive.isSignedIn) {
+        const cloudState = this.googleDrive.getCloudState();
+        
+        // Only attempt cloud load in appropriate states
+        if (cloudState === 'never-attempted' || 
+            (cloudState === 'failed' && this.googleDrive.canRetryCloudOperation())) {
           
-          if (cloudData) {
-            window.__PRODUCTIVITY_CALENDAR_SYNC__.hasLoadedFromCloud = true;
-            
-            const localData = this.loadLocalData();
-            if (localData) {
-              const mergedData = this.safeMerge(localData, cloudData);
-              this.saveLocalData(mergedData);
-              debugLog('✅ Loaded from cloud and merged with local data');
-              return mergedData;
-            } else {
-              this.saveLocalData(cloudData);
-              debugLog('✅ Loaded from cloud (no local data)');
-              return cloudData;
+          try {
+            debugLog('🌥️ Attempting cloud load...');
+            const cloudData = await this.googleDrive.loadFromCloud();
+
+            if (cloudData) {
+              const localData = this.loadLocalData();
+              if (localData) {
+                const mergedData = this.safeMerge(localData, cloudData);
+                this.saveLocalData(mergedData);
+                debugLog('✅ Loaded from cloud and merged with local data');
+                return mergedData;
+              } else {
+                this.saveLocalData(cloudData);
+                debugLog('✅ Loaded from cloud (no local data)');
+                return cloudData;
+              }
             }
+          } catch (error) {
+            debugLog('⚠️ Cloud load failed, using local data', error.message);
+            // Error state already set by loadFromCloud(), continue with local
           }
-        } catch (error) {
-          debugLog('⚠️ Cloud load failed, using local data', error.message);
-          window.__PRODUCTIVITY_CALENDAR_SYNC__.hasLoadedFromCloud = true;
+        } else if (cloudState === 'success') {
+          debugLog('✅ Previously loaded from cloud successfully');
+        } else {
+          debugLog(`⏸️ Cloud load not attempted (state: ${cloudState})`);
         }
       }
-      
+
       const localData = this.loadLocalData();
       debugLog('📱 Using local storage data', { 
-        taskCount: this.googleDrive.countTasks(localData)
+        taskCount: this.googleDrive.countTasks(localData),
+        cloudState: this.syncEnabled ? this.googleDrive.getCloudState() : 'disabled'
       });
       return localData;
     } catch (error) {
@@ -876,13 +1000,50 @@ class HybridStorageManager {
     }
   }
 
+  // Update getSyncStatus in HybridStorageManager
   getSyncStatus() {
+    const cloudState = this.syncEnabled ? this.googleDrive.getCloudState() : 'disabled';
+    const globalState = window.__PRODUCTIVITY_CALENDAR_SYNC__;
+    
     return {
       syncEnabled: this.syncEnabled,
       status: this.syncStatus,
       lastSyncTime: this.lastSyncTime,
-      googleSignInStatus: this.googleDrive.getSignInStatus()
+      
+      // Enhanced cloud state info
+      cloudState: cloudState,
+      canRetry: this.syncEnabled ? this.googleDrive.canRetryCloudOperation() : false,
+      failureCount: globalState.failureCount,
+      nextRetryAt: globalState.retryAfter ? new Date(globalState.retryAfter) : null,
+      lastSuccessfulLoad: globalState.lastSuccessfulLoad ? new Date(globalState.lastSuccessfulLoad) : null,
+      
+      googleSignInStatus: this.googleDrive.getSignInStatus(),
+      
+      // Helpful user messages
+      userMessage: this.getUserStatusMessage(cloudState, globalState)
     };
+  }
+
+  getUserStatusMessage(cloudState, globalState) {
+    switch (cloudState) {
+      case 'never-attempted':
+        return 'Ready to sync';
+      case 'loading':
+        return 'Syncing...';
+      case 'success':
+        return 'Synced successfully';
+      case 'failed':
+        if (globalState.failureCount >= 5) {
+          return 'Sync failed multiple times. Manual reset required.';
+        }
+        return `Sync failed. Will retry automatically.`;
+      case 'network-error':
+        return 'Network issue. Will retry when connection improves.';
+      case 'auth-error':
+        return 'Authentication expired. Please sign in again.';
+      default:
+        return 'Sync disabled';
+    }
   }
 
   // 🔄 Force a fresh load from cloud (for recovery purposes)
@@ -995,6 +1156,33 @@ class HybridStorageManager {
       reader.readAsText(file);
     });
   }
+  // Add to HybridStorageManager class
+  async resetSyncState() {
+    debugLog('🔄 Manually resetting sync state...');
+    this.googleDrive.resetCloudState();
+    this.syncStatus = this.googleDrive.isSignedIn ? 'connected' : 'disconnected';
+    return true;
+  }
+
+  async forceSyncRetry() {
+    debugLog('🔄 Forcing sync retry...');
+    this.googleDrive.resetCloudState();
+    
+    if (this.syncEnabled && this.googleDrive.isSignedIn) {
+      try {
+        await this.performInitialSync();
+        return true;
+      } catch (error) {
+        debugLog('❌ Force retry failed', error.message);
+        return false;
+      }
+    }
+    
+    return false;
+  }
+
+
+
 }
 
 // Create and export the global storage manager
@@ -1049,6 +1237,17 @@ export const getSyncStatus = async () => {
 export const emergencyRecovery = async () => {
   await ensureInitialized();
   return storageManager.emergencyRecovery();
+};
+
+// Export these functions
+export const resetSyncState = async () => {
+  await ensureInitialized();
+  return storageManager.resetSyncState();
+};
+
+export const forceSyncRetry = async () => {
+  await ensureInitialized();
+  return storageManager.forceSyncRetry();
 };
 
 export { storageManager };
