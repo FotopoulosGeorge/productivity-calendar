@@ -1,4 +1,4 @@
-// src/utils/storageUtils.js - BULLETPROOF version with global flags
+// src/utils/storageUtils.js - UPDATED with SAFE merge logic
 import GOOGLE_CONFIG from '../config/googleConfig';
 
 const STORAGE_KEY = 'productivity-calendar-data';
@@ -427,7 +427,7 @@ class GoogleDriveSync {
       
       if (Array.isArray(dayData)) {
         validatedData[dateKey] = dayData.filter(task => 
-          task && typeof task === 'object' && task.id
+          task && typeof task === 'object' && (task.id || task.title)
         );
       } else if (dayData === null || dayData === undefined) {
         // Skip null/undefined entries
@@ -482,7 +482,7 @@ class GoogleDriveSync {
   }
 }
 
-// BULLETPROOF storage manager with global state management
+// BULLETPROOF storage manager with SAFE merge logic
 class HybridStorageManager {
   constructor() {
     this.googleDrive = new GoogleDriveSync();
@@ -581,9 +581,9 @@ class HybridStorageManager {
       });
 
       if (cloudData && localData) {
-        const mergedData = this.intelligentMerge(localData, cloudData);
+        const mergedData = this.safeMerge(localData, cloudData);
         this.saveLocalData(mergedData);
-        debugLog('✅ Data merged intelligently');
+        debugLog('✅ Data merged safely');
       } else if (localData && !cloudData) {
         await this.googleDrive.saveToCloud(localData);
         debugLog('✅ Local data uploaded to cloud');
@@ -603,43 +603,170 @@ class HybridStorageManager {
     }
   }
 
-  intelligentMerge(localData, cloudData) {
-    debugLog('🧠 Performing intelligent merge...');
+  // 🛡️ SAFE MERGE LOGIC - NEVER LOSES DATA
+  safeMerge(localData, cloudData) {
+    debugLog('🛡️ SAFE merge - preserving all data...');
     
-    const localTime = localData?.localTimestamp || 
-                      (localData?.lastSyncedAt ? new Date(localData.lastSyncedAt).getTime() : 0);
-    const cloudTime = cloudData?.localTimestamp || 
-                      (cloudData?.lastSyncedAt ? new Date(cloudData.lastSyncedAt).getTime() : 0);
+    // Handle empty cases
+    if (!localData || Object.keys(localData).length === 0) {
+      debugLog('✅ Using cloud data (no local data)');
+      return cloudData || {};
+    }
+    
+    if (!cloudData || Object.keys(cloudData).length === 0) {
+      debugLog('✅ Using local data (no cloud data)');
+      return localData || {};
+    }
     
     const localTaskCount = this.googleDrive.countTasks(localData);
     const cloudTaskCount = this.googleDrive.countTasks(cloudData);
     
-    debugLog('🔍 Merge analysis', {
-      local: { count: localTaskCount, timestamp: localTime },
-      cloud: { count: cloudTaskCount, timestamp: cloudTime }
+    debugLog('🔍 Safe merge analysis', {
+      local: { count: localTaskCount },
+      cloud: { count: cloudTaskCount }
     });
     
-    const timeDiff = Math.abs(localTime - cloudTime);
-    if (timeDiff > 10000) {
-      if (localTime > cloudTime) {
-        debugLog('✅ Using local data (significantly newer)');
-        return localData;
-      } else {
-        debugLog('✅ Using cloud data (significantly newer)');
-        return cloudData;
+    // ALWAYS merge both datasets completely
+    return this.performCompleteMerge(localData, cloudData);
+  }
+
+  // 🔄 COMPLETE MERGE - Preserves all tasks from both sources
+  performCompleteMerge(localData, cloudData) {
+    debugLog('🔄 Performing complete merge (preserves all tasks)...');
+    
+    // Start with a deep copy of local data
+    const mergedData = JSON.parse(JSON.stringify(localData || {}));
+    
+    // Get all unique date keys from both datasets
+    const allDateKeys = new Set([
+      ...Object.keys(localData || {}),
+      ...Object.keys(cloudData || {})
+    ]);
+    
+    let tasksAdded = 0;
+    let tasksUpdated = 0;
+    let datesProcessed = 0;
+    
+    allDateKeys.forEach(dateKey => {
+      // Skip metadata keys
+      if (dateKey.includes('Sync') || dateKey.includes('timestamp') || dateKey.includes('Version')) {
+        return;
+      }
+      
+      const localTasks = localData?.[dateKey] || [];
+      const cloudTasks = cloudData?.[dateKey] || [];
+      
+      // Ensure both are arrays
+      if (!Array.isArray(localTasks) || !Array.isArray(cloudTasks)) {
+        mergedData[dateKey] = Array.isArray(localTasks) ? localTasks : 
+                             Array.isArray(cloudTasks) ? cloudTasks : [];
+        return;
+      }
+      
+      // Start with local tasks
+      const mergedTasks = [...localTasks];
+      
+      // Add cloud tasks that don't exist locally
+      cloudTasks.forEach(cloudTask => {
+        if (!cloudTask || typeof cloudTask !== 'object') return;
+        
+        const existingIndex = mergedTasks.findIndex(localTask => 
+          this.tasksAreEqual(localTask, cloudTask)
+        );
+        
+        if (existingIndex === -1) {
+          // Task doesn't exist locally, add it
+          const newTask = {
+            ...cloudTask,
+            id: cloudTask.id || `merged_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+          };
+          mergedTasks.push(newTask);
+          tasksAdded++;
+          debugLog(`➕ Added cloud task: ${cloudTask.title || 'Untitled'}`);
+        } else {
+          // Task exists, merge with newer version
+          const mergedTask = this.mergeTaskVersions(mergedTasks[existingIndex], cloudTask);
+          mergedTasks[existingIndex] = mergedTask;
+          tasksUpdated++;
+          debugLog(`🔄 Updated task: ${mergedTask.title || 'Untitled'}`);
+        }
+      });
+      
+      mergedData[dateKey] = mergedTasks;
+      datesProcessed++;
+    });
+    
+    const finalTaskCount = this.googleDrive.countTasks(mergedData);
+    
+    debugLog('✅ Complete merge finished', {
+      datesProcessed,
+      tasksAdded,
+      tasksUpdated,
+      originalLocal: this.googleDrive.countTasks(localData),
+      originalCloud: this.googleDrive.countTasks(cloudData),
+      finalTotal: finalTaskCount
+    });
+    
+    // Add merge metadata
+    return {
+      ...mergedData,
+      lastSyncedAt: new Date().toISOString(),
+      syncedFrom: 'merged',
+      localTimestamp: Date.now(),
+      mergeInfo: {
+        localTasks: this.googleDrive.countTasks(localData),
+        cloudTasks: this.googleDrive.countTasks(cloudData),
+        finalTasks: finalTaskCount,
+        tasksAdded,
+        tasksUpdated,
+        mergedAt: new Date().toISOString()
+      }
+    };
+  }
+
+  // 🔍 Check if two tasks are the same
+  tasksAreEqual(task1, task2) {
+    if (!task1 || !task2) return false;
+    
+    // First try ID match (most reliable)
+    if (task1.id && task2.id) {
+      return task1.id === task2.id;
+    }
+    
+    // Fallback to title and structure match
+    return task1.title === task2.title && 
+           task1.steps?.length === task2.steps?.length;
+  }
+
+  // 🔄 Merge two versions of the same task
+  mergeTaskVersions(localTask, cloudTask) {
+    const localTime = new Date(localTask.lastModified || 0).getTime();
+    const cloudTime = new Date(cloudTask.lastModified || 0).getTime();
+    
+    // Use the newer version as base
+    const newerTask = cloudTime > localTime ? cloudTask : localTask;
+    const olderTask = cloudTime > localTime ? localTask : cloudTask;
+    
+    // Merge reflection if one is empty
+    const mergedReflection = newerTask.reflection || olderTask.reflection || '';
+    
+    // Merge steps - prefer more completed steps
+    let mergedSteps = newerTask.steps || [];
+    if (olderTask.steps) {
+      const newerCompleted = newerTask.steps?.filter(s => s.status === 'complete').length || 0;
+      const olderCompleted = olderTask.steps?.filter(s => s.status === 'complete').length || 0;
+      
+      if (olderCompleted > newerCompleted) {
+        mergedSteps = olderTask.steps;
       }
     }
     
-    if (localTaskCount > cloudTaskCount) {
-      debugLog('✅ Using local data (more tasks)');
-      return localData;
-    } else if (cloudTaskCount > localTaskCount) {
-      debugLog('✅ Using cloud data (more tasks)');
-      return cloudData;
-    }
-    
-    debugLog('✅ Using local data (same task count, prefer local)');
-    return localData;
+    return {
+      ...newerTask,
+      reflection: mergedReflection,
+      steps: mergedSteps,
+      lastModified: new Date().toISOString()
+    };
   }
 
   async saveData(data) {
@@ -702,7 +829,7 @@ class HybridStorageManager {
             
             const localData = this.loadLocalData();
             if (localData) {
-              const mergedData = this.intelligentMerge(localData, cloudData);
+              const mergedData = this.safeMerge(localData, cloudData);
               this.saveLocalData(mergedData);
               debugLog('✅ Loaded from cloud and merged with local data');
               return mergedData;
@@ -758,7 +885,7 @@ class HybridStorageManager {
     };
   }
 
-  // Force a fresh load from cloud (for debug purposes)
+  // 🔄 Force a fresh load from cloud (for recovery purposes)
   async forceCloudLoad() {
     if (this.syncEnabled && this.googleDrive.isSignedIn) {
       try {
@@ -772,7 +899,6 @@ class HybridStorageManager {
         const cloudData = await this.googleDrive.loadFromCloud();
         
         if (cloudData) {
-          this.saveLocalData(cloudData);
           debugLog('✅ Force loaded from cloud');
           return cloudData;
         }
@@ -784,6 +910,45 @@ class HybridStorageManager {
       }
     }
     return null;
+  }
+
+  // 🚨 Emergency recovery function - merges current local with fresh cloud data
+  async emergencyRecovery() {
+    try {
+      debugLog('🚨 Starting emergency recovery...');
+      
+      // Get current local data
+      const localData = this.loadLocalData();
+      debugLog('📱 Current local tasks:', this.googleDrive.countTasks(localData));
+      
+      // Force load from cloud
+      const cloudData = await this.forceCloudLoad();
+      debugLog('☁️ Cloud tasks found:', this.googleDrive.countTasks(cloudData));
+      
+      if (cloudData && localData) {
+        // Perform safe merge
+        const mergedData = this.safeMerge(localData, cloudData);
+        
+        // Save merged result
+        await this.saveData(mergedData);
+        
+        debugLog('✅ Emergency recovery complete', {
+          recoveredTasks: this.googleDrive.countTasks(mergedData)
+        });
+        
+        return mergedData;
+      } else if (cloudData) {
+        await this.saveData(cloudData);
+        debugLog('✅ Recovered from cloud only');
+        return cloudData;
+      } else {
+        debugLog('⚠️ No cloud data found for recovery');
+        return localData;
+      }
+    } catch (error) {
+      console.error('❌ Emergency recovery failed:', error);
+      return null;
+    }
   }
 
   // Legacy functions
@@ -878,6 +1043,12 @@ export const disableGoogleSync = async () => {
 export const getSyncStatus = async () => {
   await ensureInitialized();
   return storageManager.getSyncStatus();
+};
+
+// 🚨 NEW: Emergency recovery function
+export const emergencyRecovery = async () => {
+  await ensureInitialized();
+  return storageManager.emergencyRecovery();
 };
 
 export { storageManager };
