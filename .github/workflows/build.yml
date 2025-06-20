@@ -50,12 +50,16 @@ jobs:
       run: npm run electron:build -- --publish=never
       env:
         GH_TOKEN: ${{ secrets.GH_TOKEN }}
+        REACT_APP_GOOGLE_CLIENT_ID: ${{ secrets.REACT_APP_GOOGLE_CLIENT_ID }}
+        REACT_APP_GOOGLE_API_KEY: ${{ secrets.REACT_APP_GOOGLE_API_KEY }}
         
     - name: Build Electron app (Linux)
       if: matrix.os == 'ubuntu-latest'
       run: npm run electron:build -- --publish=never
       env:
         GH_TOKEN: ${{ secrets.GH_TOKEN }}
+        REACT_APP_GOOGLE_CLIENT_ID: ${{ secrets.REACT_APP_GOOGLE_CLIENT_ID }}
+        REACT_APP_GOOGLE_API_KEY: ${{ secrets.REACT_APP_GOOGLE_API_KEY }}
         
     # Upload only installer files, not the entire dist folder
     - name: Upload Windows artifacts
@@ -114,3 +118,5 @@ jobs:
           *.rpm
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        REACT_APP_GOOGLE_CLIENT_ID: ${{ secrets.REACT_APP_GOOGLE_CLIENT_ID }}
+        REACT_APP_GOOGLE_API_KEY: ${{ secrets.REACT_APP_GOOGLE_API_KEY }}
