@@ -125,6 +125,19 @@ const App = () => {
       setIsLoading(false);
     }
   };
+
+    const isViewingCurrentWeek = (displayedDate) => {
+      const today = new Date();
+      const currentWeekStart = getStartOfWeek(new Date(today));
+      const displayedWeekStart = getStartOfWeek(new Date (displayedDate));
+      
+
+        // Compare just the date parts, not time
+      const currentWeekDateString = currentWeekStart.toDateString();
+      const displayedWeekDateString = displayedWeekStart.toDateString();
+      
+       return currentWeekDateString === displayedWeekDateString;
+    };
     // Add this helper function near the top of App.js
     const hasRecurringTaskOfType = (tasks, taskType) => {
       if (!Array.isArray(tasks)) return false;
@@ -439,7 +452,7 @@ const App = () => {
             </button>
             
             <button 
-              className="today-button"
+              className={`week-button ${isViewingCurrentWeek(currentDate) ? 'current-week-active' : 'current-week-inactive'}`}
               onClick={() => setCurrentDate(new Date())}
             >
               Current Week
@@ -453,7 +466,7 @@ const App = () => {
             </button>
           </div>
         </div>
-
+        
 
         {/* Google Drive Sync Status */}
         <SyncStatusBanner onSyncStatusChange={handleSyncStatusChange} />
