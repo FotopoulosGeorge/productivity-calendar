@@ -125,7 +125,19 @@ const App = () => {
       setIsLoading(false);
     }
   };
-
+    // Add this helper function near the top of App.js
+    const hasRecurringTaskOfType = (tasks, taskType) => {
+      if (!Array.isArray(tasks)) return false;
+      
+      const recurringTitles = {
+        'planning': 'Weekly Planning',
+        'reflection': 'Friday Reflection', 
+        'checkin': 'Daily Check-in'
+      };
+      
+      const expectedTitle = recurringTitles[taskType];
+      return tasks.some(task => task.title === expectedTitle);
+    };
   const calculateWeeklyProgress = useCallback(() => {
     const startOfWeek = getStartOfWeek(currentDate);
     let completed = 0;
@@ -310,6 +322,8 @@ const App = () => {
     return initialData;
   };
 
+
+
   const generateTasksForWeek = (weekStartDate) => {
     const updatedTasks = {...tasks};
     let tasksAdded = false;
@@ -318,19 +332,24 @@ const App = () => {
       const date = new Date(weekStartDate);
       date.setDate(date.getDate() + i);
       const dateKey = formatDateKey(date);
+      const dayOfWeek = date.getDay();
       
-      if (!updatedTasks[dateKey] || !Array.isArray(updatedTasks[dateKey]) || updatedTasks[dateKey].length === 0) {
-        const dayOfWeek = date.getDay();
+      // Ensure day exists as array
+      if (!updatedTasks[dateKey] || !Array.isArray(updatedTasks[dateKey])) {
         updatedTasks[dateKey] = [];
+      }
+      
+      // Only add recurring tasks if the specific type doesn't exist
+      if (dayOfWeek === 0 && !hasRecurringTaskOfType(updatedTasks[dateKey], 'planning')) {
+        updatedTasks[dateKey].push(createRecurringTask('planning'));
         tasksAdded = true;
-        
-        if (dayOfWeek === 0) {
-          updatedTasks[dateKey].push(createRecurringTask('planning'));
-        } else if (dayOfWeek === 5) {
-          updatedTasks[dateKey].push(createRecurringTask('reflection'));
-        } else if (dayOfWeek !== 6) {
-          updatedTasks[dateKey].push(createRecurringTask('checkin'));
-        }
+      } else if (dayOfWeek === 5 && !hasRecurringTaskOfType(updatedTasks[dateKey], 'reflection')) {
+        updatedTasks[dateKey].push(createRecurringTask('reflection'));
+        tasksAdded = true;
+      } else if (dayOfWeek !== 6 && dayOfWeek !== 0 && dayOfWeek !== 5 && 
+                !hasRecurringTaskOfType(updatedTasks[dateKey], 'checkin')) {
+        updatedTasks[dateKey].push(createRecurringTask('checkin'));
+        tasksAdded = true;
       }
     }
     

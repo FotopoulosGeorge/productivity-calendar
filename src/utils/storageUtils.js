@@ -716,7 +716,23 @@ class HybridStorageManager {
       throw error;
     }
   }
-
+  deduplicateRecurringTasks(tasks) {
+    if (!Array.isArray(tasks)) return tasks;
+    
+    const seen = new Set();
+    const recurringTitles = ['Weekly Planning', 'Friday Reflection', 'Daily Check-in'];
+    
+    return tasks.filter(task => {
+      if (recurringTitles.includes(task.title)) {
+        if (seen.has(task.title)) {
+          debugLog(`🗑️ Removing duplicate recurring task: ${task.title}`);
+          return false; // Skip duplicate
+        }
+        seen.add(task.title);
+      }
+      return true; // Keep task
+    });
+  }
   // 🛡️ SAFE MERGE LOGIC - NEVER LOSES DATA
   safeMerge(localData, cloudData) {
     debugLog('🛡️ SAFE merge - preserving all data...');
@@ -806,7 +822,7 @@ class HybridStorageManager {
         }
       });
       
-      mergedData[dateKey] = mergedTasks;
+      mergedData[dateKey] = this.deduplicateRecurringTasks(mergedTasks);
       datesProcessed++;
     });
     
@@ -847,9 +863,19 @@ class HybridStorageManager {
       return task1.id === task2.id;
     }
     
-    // Fallback to title and structure match
+    // Enhanced recurring task detection
+    const recurringTasks = ['Weekly Planning', 'Friday Reflection', 'Daily Check-in'];
+    const isRecurring1 = recurringTasks.includes(task1.title);
+    const isRecurring2 = recurringTasks.includes(task2.title);
+    
+    if (isRecurring1 && isRecurring2) {
+      // For recurring tasks, only title match is needed
+      return task1.title === task2.title;
+    }
+    
+    // For regular tasks, use title and structure match
     return task1.title === task2.title && 
-           task1.steps?.length === task2.steps?.length;
+          task1.steps?.length === task2.steps?.length;
   }
 
   // 🔄 Merge two versions of the same task
