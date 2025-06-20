@@ -3,10 +3,10 @@
 
 const GOOGLE_CONFIG = {
   // Your OAuth 2.0 Client ID from Google Cloud Console
-  clientId: process.env.REACT_APP_GOOGLE_CLIENT_ID || 'YOUR_CLIENT_ID.apps.googleusercontent.com',
+  clientId: process.env.REACT_APP_GOOGLE_CLIENT_ID,
   
-  // Your API Key from Google Cloud Console
-  apiKey: process.env.REACT_APP_GOOGLE_API_KEY || 'YOUR_API_KEY',
+  // API Key from Google Cloud Console
+  apiKey: process.env.REACT_APP_GOOGLE_API_KEY,
   
   // Google Drive API discovery document
   discoveryDoc: 'https://www.googleapis.com/discovery/v1/apis/drive/v3/rest',
