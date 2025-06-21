@@ -354,7 +354,7 @@ const App = () => {
       
       // Only add recurring tasks if the specific type doesn't exist
       if (dayOfWeek === 0 && !hasRecurringTaskOfType(updatedTasks[dateKey], 'planning')) {
-        updatedTasks[dateKey].push(createRecurringTask('planning'));
+        updatedTasks[dateKey].push(createRecurringTask('planning', dateKey));
         tasksAdded = true;
       } else if (dayOfWeek === 5 && !hasRecurringTaskOfType(updatedTasks[dateKey], 'reflection')) {
         updatedTasks[dateKey].push(createRecurringTask('reflection'));

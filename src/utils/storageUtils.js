@@ -801,7 +801,7 @@ class HybridStorageManager {
         if (!cloudTask || typeof cloudTask !== 'object') return;
         
         const existingIndex = mergedTasks.findIndex(localTask => 
-          this.tasksAreEqual(localTask, cloudTask)
+          this.tasksAreEqual(localTask, cloudTask, dateKey)
         );
         
         if (existingIndex === -1) {
@@ -1137,7 +1137,29 @@ class HybridStorageManager {
       return null;
     }
   }
-
+  tasksAreEqualForDate(task1, task2, dateKey) {
+    if (!task1 || !task2) return false;
+    
+    // First try ID match (most reliable)
+    if (task1.id && task2.id) {
+      return task1.id === task2.id;
+    }
+    
+    // For recurring tasks, check title AND ensure they're for the same logical date
+    const recurringTasks = ['Weekly Planning', 'Friday Reflection', 'Daily Check-in'];
+    const isRecurring1 = recurringTasks.includes(task1.title);
+    const isRecurring2 = recurringTasks.includes(task2.title);
+    
+    if (isRecurring1 && isRecurring2) {
+      // Same recurring task type AND same date = same task
+      return task1.title === task2.title;
+      // dateKey provides the date context we need
+    }
+    
+    // For regular tasks, use title and structure match
+    return task1.title === task2.title && 
+          task1.steps?.length === task2.steps?.length;
+  }
   // Legacy functions
   async exportData() {
     try {

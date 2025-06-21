@@ -28,6 +28,12 @@ export const deepCloneTask = (task) => {
  * @returns {Object} New task object
  */
 export const createRecurringTask = (type) => {
+  const generateConsistentId = (taskType, date) => {
+    if (date) {
+      return `recurring_${taskType}_${date}`;
+    }
+    return generateTaskId(); // Fallback to random ID
+  };
   const baseTask = {
     id: generateTaskId(),
     reflection: ""
