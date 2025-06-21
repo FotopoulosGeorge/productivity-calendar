@@ -26,15 +26,29 @@ const debugLog = (message, data = null) => {
 
 // Google Drive API wrapper with bulletproof race condition protection
 class GoogleDriveSync {
+
   constructor() {
     this.isInitialized = false;
     this.isSignedIn = false;
     this.accessToken = null;
     this.tokenClient = null;
-    this.tokenExpiry = null;
-    
+    this.tokenExpiry = null;    
     this.loadSyncState();
+    this.lastAPICall = 0;
+    this.minDelay = 500; 
   }
+
+  async throttleAPI() {
+  const now = Date.now();
+  const timeSinceLastCall = now - this.lastAPICall;
+  
+  if (timeSinceLastCall < this.minDelay) {
+    const waitTime = this.minDelay - timeSinceLastCall;
+    await new Promise(resolve => setTimeout(resolve, waitTime));
+  }
+  
+  this.lastAPICall = Date.now();
+}
 
   saveSyncState() {
     try {
@@ -248,6 +262,7 @@ class GoogleDriveSync {
   }
 
   async saveToCloud(data) {
+    await this.throttleAPI();
     if (!this.isSignedIn || !this.accessToken) {
       throw new Error('Not signed in to Google Drive');
     }
@@ -283,7 +298,7 @@ class GoogleDriveSync {
       if (existingFile) {
         debugLog('📝 Updating existing file in Google Drive', { fileId: existingFile.id });
         
-        const response = await fetch(`https://www.googleapis.com/upload/drive/v3/files/${existingFile.id}?uploadType=media`, {
+        const response = await fetchWithTimeout(`https://www.googleapis.com/upload/drive/v3/files/${existingFile.id}?uploadType=media`, {
           method: 'PATCH',
           headers: {
             'Authorization': `Bearer ${this.accessToken}`,
@@ -309,7 +324,7 @@ class GoogleDriveSync {
         form.append('metadata', new Blob([JSON.stringify(metadata)], {type: 'application/json'}));
         form.append('file', new Blob([fileContent], {type: 'application/json'}));
 
-        const response = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
+        const response = await fetchWithTimeout('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${this.accessToken}`,
@@ -416,7 +431,7 @@ class GoogleDriveSync {
 
     debugLog('📁 Found calendar file in Google Drive', { fileId: file.id, name: file.name });
 
-    const response = await fetch(`https://www.googleapis.com/drive/v3/files/${file.id}?alt=media`, {
+    const response = await fetchWithTimeout(`https://www.googleapis.com/drive/v3/files/${file.id}?alt=media`, {
       headers: {
         'Authorization': `Bearer ${this.accessToken}`,
       },
@@ -441,6 +456,8 @@ class GoogleDriveSync {
     
     return validatedData;
   }
+
+ 
 
   validateDataStructure(data) {
     if (!data || typeof data !== 'object') {
@@ -582,8 +599,40 @@ class GoogleDriveSync {
     globalState.lastFailedLoad = 0;
   }
 
-
 }
+
+const fetchWithTimeout = async (url, options, timeout = 10000) => {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), timeout);
+  
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal
+    });
+    clearTimeout(id);
+    return response;
+  } catch (error) {
+    clearTimeout(id);
+    if (error.name === 'AbortError') {
+      throw new Error('Request timed out - please check your internet connection');
+    }
+    throw error;
+  }
+};
+
+const handleAPIError = (error) => {
+  if (error.message.includes('rate limit')) {
+    return 'Saving too quickly - waiting a moment...';
+  }
+  if (error.message.includes('timeout')) {
+    return 'Slow connection - please try again';
+  }
+  if (error.message.includes('401')) {
+    return 'Please sign in to Google Drive again';
+  }
+  return 'Sync failed - your data is saved locally';
+};
 
 // BULLETPROOF storage manager with SAFE merge logic
 class HybridStorageManager {

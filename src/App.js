@@ -36,7 +36,7 @@ const App = () => {
     const cleanedData = {};
     
     // Remove sync metadata first
-    const { lastSyncedAt, syncedFrom, localTimestamp, syncVersion, ...taskData } = data;
+    const { lastSyncedAt, syncedFrom, localTimestamp, syncVersion, mergeInfo, ...taskData } = data;
     
     Object.keys(taskData).forEach(dateKey => {
       const dayData = taskData[dateKey];
