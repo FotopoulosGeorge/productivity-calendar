@@ -1,8 +1,9 @@
 // src/components/SyncStatusBanner.js - Fixed version with working merge
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Cloud, CloudOff, Loader, AlertCircle, CheckCircle, Settings, X, Info } from 'lucide-react';
-import { enableGoogleSync, disableGoogleSync, getSyncStatus } from '../utils/storageUtils';
+import { enableGoogleSync, disableGoogleSync, getSyncStatus} from '../utils/storageUtils';
 import '../styles/components/SyncStatusBanner.css';
+
 
 const SYNC_DISMISSED_KEY = 'productivity-calendar-sync-dismissed';
 
@@ -19,13 +20,25 @@ const SyncStatusBanner = ({ onSyncStatusChange }) => {
   const [showMergeDialog, setShowMergeDialog] = useState(false);
   const [mergeInfo, setMergeInfo] = useState(null);
 
+  const checkSyncStatus = useCallback(async () => {
+    try {
+      const status = await getSyncStatus();
+      setSyncStatus(status);
+      if (onSyncStatusChange) {
+        onSyncStatusChange(status);
+      }
+    } catch (error) {
+      console.error('Failed to check sync status:', error);
+    }
+  }, [onSyncStatusChange]);
+
   useEffect(() => {
     checkSyncStatus();
     checkDismissedState();
     
     const interval = setInterval(checkSyncStatus, 10000); // Check every 10 seconds
     return () => clearInterval(interval);
-  }, []);
+  }, [checkSyncStatus]);
 
   const checkDismissedState = () => {
     const dismissed = localStorage.getItem(SYNC_DISMISSED_KEY) === 'true';
@@ -40,18 +53,6 @@ const SyncStatusBanner = ({ onSyncStatusChange }) => {
   const handleShowSyncOptions = () => {
     localStorage.removeItem(SYNC_DISMISSED_KEY);
     setIsDismissed(false);
-  };
-
-  const checkSyncStatus = async () => {
-    try {
-      const status = await getSyncStatus();
-      setSyncStatus(status);
-      if (onSyncStatusChange) {
-        onSyncStatusChange(status);
-      }
-    } catch (error) {
-      console.error('Failed to check sync status:', error);
-    }
   };
 
   const countLocalTasks = (data) => {

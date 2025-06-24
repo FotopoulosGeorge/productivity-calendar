@@ -13,17 +13,8 @@ const App = () => {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [tasks, setTasks] = useState({});
   const [weeklyProgress, setWeeklyProgress] = useState({ completed: 0, total: 0 });
-  const [syncStatus, setSyncStatus] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [hasInitialized, setHasInitialized] = useState(false);
-  
-  useEffect(() => {
-    // CRITICAL: Only initialize once
-    if (!hasInitialized) {
-      initializeApp();
-      setHasInitialized(true);
-    }
-  }, [hasInitialized]);
 
   const validateAndCleanData = (data) => {
     console.log('🔍 Validating data structure...', { type: typeof data, keys: data ? Object.keys(data).length : 0 });
@@ -76,7 +67,31 @@ const App = () => {
     return cleanedData;
   };
 
-  const initializeApp = async () => {
+  const createInitialData = (date) => {
+    const startOfWeek = getStartOfWeek(date);
+    const initialData = {};
+    
+    for (let i = 0; i < 7; i++) {
+      const date = new Date(startOfWeek);
+      date.setDate(date.getDate() + i);
+      const dateKey = formatDateKey(date);
+      const dayOfWeek = date.getDay();
+      
+      initialData[dateKey] = [];
+      
+      if (dayOfWeek === 0) {
+        initialData[dateKey].push(createRecurringTask('planning'));
+      } else if (dayOfWeek === 5) {
+        initialData[dateKey].push(createRecurringTask('reflection'));
+      } else if (dayOfWeek !== 6) {
+        initialData[dateKey].push(createRecurringTask('checkin'));
+      }
+    }
+    
+    return initialData;
+  };
+
+  const initializeApp = useCallback(async () => {
     console.log('🚀 Initializing app (single call)...');
     setIsLoading(true);
     
@@ -124,33 +139,42 @@ const App = () => {
     } finally {
       setIsLoading(false);
     }
+  }, [currentDate]);
+
+  useEffect(() => {
+    // CRITICAL: Only initialize once
+    if (!hasInitialized) {
+      initializeApp();
+      setHasInitialized(true);
+    }
+  }, [hasInitialized, initializeApp]);
+
+  const isViewingCurrentWeek = (displayedDate) => {
+    const today = new Date();
+    const currentWeekStart = getStartOfWeek(new Date(today));
+    const displayedWeekStart = getStartOfWeek(new Date (displayedDate));
+    
+
+      // Compare just the date parts, not time
+    const currentWeekDateString = currentWeekStart.toDateString();
+    const displayedWeekDateString = displayedWeekStart.toDateString();
+    
+     return currentWeekDateString === displayedWeekDateString;
   };
-
-    const isViewingCurrentWeek = (displayedDate) => {
-      const today = new Date();
-      const currentWeekStart = getStartOfWeek(new Date(today));
-      const displayedWeekStart = getStartOfWeek(new Date (displayedDate));
-      
-
-        // Compare just the date parts, not time
-      const currentWeekDateString = currentWeekStart.toDateString();
-      const displayedWeekDateString = displayedWeekStart.toDateString();
-      
-       return currentWeekDateString === displayedWeekDateString;
+  // Add this helper function near the top of App.js
+  const hasRecurringTaskOfType = (tasks, taskType) => {
+    if (!Array.isArray(tasks)) return false;
+    
+    const recurringTitles = {
+      'planning': 'Weekly Planning',
+      'reflection': 'Friday Reflection', 
+      'checkin': 'Daily Check-in'
     };
-    // Add this helper function near the top of App.js
-    const hasRecurringTaskOfType = (tasks, taskType) => {
-      if (!Array.isArray(tasks)) return false;
-      
-      const recurringTitles = {
-        'planning': 'Weekly Planning',
-        'reflection': 'Friday Reflection', 
-        'checkin': 'Daily Check-in'
-      };
-      
-      const expectedTitle = recurringTitles[taskType];
-      return tasks.some(task => task.title === expectedTitle);
-    };
+    
+    const expectedTitle = recurringTitles[taskType];
+    return tasks.some(task => task.title === expectedTitle);
+  };
+  
   const calculateWeeklyProgress = useCallback(() => {
     const startOfWeek = getStartOfWeek(currentDate);
     let completed = 0;
@@ -307,36 +331,6 @@ const App = () => {
     }
   };
 
-  const handleSyncStatusChange = (newSyncStatus) => {
-    setSyncStatus(newSyncStatus);
-  };
-  
-  const createInitialData = (date) => {
-    const startOfWeek = getStartOfWeek(date);
-    const initialData = {};
-    
-    for (let i = 0; i < 7; i++) {
-      const date = new Date(startOfWeek);
-      date.setDate(date.getDate() + i);
-      const dateKey = formatDateKey(date);
-      const dayOfWeek = date.getDay();
-      
-      initialData[dateKey] = [];
-      
-      if (dayOfWeek === 0) {
-        initialData[dateKey].push(createRecurringTask('planning'));
-      } else if (dayOfWeek === 5) {
-        initialData[dateKey].push(createRecurringTask('reflection'));
-      } else if (dayOfWeek !== 6) {
-        initialData[dateKey].push(createRecurringTask('checkin'));
-      }
-    }
-    
-    return initialData;
-  };
-
-
-
   const generateTasksForWeek = (weekStartDate) => {
     const updatedTasks = {...tasks};
     let tasksAdded = false;
@@ -469,7 +463,7 @@ const App = () => {
         
 
         {/* Google Drive Sync Status */}
-        <SyncStatusBanner onSyncStatusChange={handleSyncStatusChange} />
+        <SyncStatusBanner />
 
         {renderWeekView()}
       </div>

@@ -562,6 +562,11 @@ class GoogleDriveSync {
       case 'loading':
         // Don't change failure counters during loading
         break;
+        
+      default:
+        // Handle any unexpected states by logging them
+        debugLog(`⚠️ Unknown cloud state: ${newState}`);
+        break;
     }
   }
 
@@ -621,18 +626,6 @@ const fetchWithTimeout = async (url, options, timeout = 10000) => {
   }
 };
 
-const handleAPIError = (error) => {
-  if (error.message.includes('rate limit')) {
-    return 'Saving too quickly - waiting a moment...';
-  }
-  if (error.message.includes('timeout')) {
-    return 'Slow connection - please try again';
-  }
-  if (error.message.includes('401')) {
-    return 'Please sign in to Google Drive again';
-  }
-  return 'Sync failed - your data is saved locally';
-};
 
 // BULLETPROOF storage manager with SAFE merge logic
 class HybridStorageManager {
@@ -730,7 +723,7 @@ class HybridStorageManager {
       } else if (cloudState === 'success') {
         debugLog('✅ Cloud already loaded successfully, skipping reload');
       } else {
-        debugLog(`⏳ Cloud in state: ${cloudState}, skipping load`);
+        debugLog(`⏸️ Cloud load not attempted (state: ${cloudState})`);
       }
 
       const localTaskCount = this.googleDrive.countTasks(localData);
