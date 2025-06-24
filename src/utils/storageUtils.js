@@ -32,7 +32,8 @@ class GoogleDriveSync {
     this.isSignedIn = false;
     this.accessToken = null;
     this.tokenClient = null;
-    this.tokenExpiry = null;    
+    this.tokenExpiry = null; 
+    this.migrateFromInsecureStorage();   
     this.loadSyncState();
     this.lastAPICall = 0;
     this.minDelay = 500; 
@@ -58,7 +59,11 @@ class GoogleDriveSync {
         tokenExpiry: this.tokenExpiry,
         lastSyncTime: new Date().toISOString()
       };
-      localStorage.setItem(SYNC_STATE_KEY, JSON.stringify(syncState));
+      const { accessToken, ...publicState } = syncState;
+        if (accessToken) {
+          sessionStorage.setItem('secure_token', accessToken);
+        }
+        sessionStorage.setItem(SYNC_STATE_KEY, JSON.stringify(publicState));
       debugLog('💾 Sync state saved');
     } catch (error) {
       console.error('Failed to save sync state:', error);
@@ -67,20 +72,26 @@ class GoogleDriveSync {
 
   loadSyncState() {
     try {
-      const savedState = localStorage.getItem(SYNC_STATE_KEY);
+      const savedState = sessionStorage.getItem(SYNC_STATE_KEY);
       if (savedState) {
         const syncState = JSON.parse(savedState);
-        
-        if (syncState.tokenExpiry && new Date(syncState.tokenExpiry) > new Date()) {
-          this.isSignedIn = syncState.isSignedIn;
-          this.accessToken = syncState.accessToken;
-          this.tokenExpiry = syncState.tokenExpiry;
-          debugLog('✅ Sync state restored from storage');
-        } else {
-          debugLog('⏰ Saved token expired, will need to re-authenticate');
-          this.clearSyncState();
-        }
+        this.isSignedIn = syncState.isSignedIn;
+        this.tokenExpiry = syncState.tokenExpiry;
+        debugLog('📱 Public sync state loaded');
       }
+      const savedToken = sessionStorage.getItem('secure_token');
+      if (savedToken) {
+        this.accessToken = savedToken;
+        debugLog('🔐 Secure token loaded');
+      }
+        
+      if (this.tokenExpiry && new Date(this.tokenExpiry) > new Date()) {
+        debugLog('✅ Sync state restored from storage');
+      } else {
+        debugLog('⏰ Saved token expired, will need to re-authenticate');
+        this.clearSyncState();
+      }
+
     } catch (error) {
       console.error('Failed to load sync state:', error);
       this.clearSyncState();
@@ -91,7 +102,8 @@ class GoogleDriveSync {
     this.isSignedIn = false;
     this.accessToken = null;
     this.tokenExpiry = null;
-    localStorage.removeItem(SYNC_STATE_KEY);
+    sessionStorage.removeItem(SYNC_STATE_KEY);
+    sessionStorage.removeItem('secure_token');
     
     // Reset global flags
     window.__PRODUCTIVITY_CALENDAR_SYNC__.hasLoadedFromCloud = false;
@@ -100,8 +112,35 @@ class GoogleDriveSync {
     
     debugLog('🧹 Sync state cleared');
   }
+  migrateFromInsecureStorage() {
+    try {
+      // Check if there's old data in localStorage
+      const oldData = localStorage.getItem(SYNC_STATE_KEY);
+      if (oldData) {
+        debugLog('🔄 Migrating from insecure localStorage...');
+        
+      const parsed = JSON.parse(oldData);
+          
+      // Save using new secure method
+      this.isSignedIn = parsed.isSignedIn;
+      this.accessToken = parsed.accessToken;
+      this.tokenExpiry = parsed.tokenExpiry;
+      this.saveSyncState();
+          
+      // Remove old insecure data
+      localStorage.removeItem(SYNC_STATE_KEY);
+          
+      debugLog('✅ Migration to secure storage complete');
+      return true;
+    }
+  } catch (error) {
+    console.error('Migration failed:', error);
+  }
+  return false;
+  }
 
   async initialize() {
+
     try {
       debugLog('🚀 Initializing Google Identity Services...');
       
