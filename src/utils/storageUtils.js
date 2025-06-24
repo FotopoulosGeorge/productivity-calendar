@@ -1,4 +1,4 @@
-// src/utils/storageUtils.js - UPDATED with SAFE merge logic
+// src/utils/storageUtils.js - COMPLETE FINAL VERSION with Week Isolation
 import GOOGLE_CONFIG from '../config/googleConfig';
 
 const STORAGE_KEY = 'productivity-calendar-data';
@@ -457,8 +457,6 @@ class GoogleDriveSync {
     return validatedData;
   }
 
- 
-
   validateDataStructure(data) {
     if (!data || typeof data !== 'object') {
       debugLog('⚠️ Invalid data structure, returning empty object');
@@ -627,7 +625,7 @@ const fetchWithTimeout = async (url, options, timeout = 10000) => {
 };
 
 
-// BULLETPROOF storage manager with SAFE merge logic
+// BULLETPROOF storage manager with SAFE merge logic and WEEK ISOLATION
 class HybridStorageManager {
   constructor() {
     this.googleDrive = new GoogleDriveSync();
@@ -758,23 +756,306 @@ class HybridStorageManager {
       throw error;
     }
   }
-  deduplicateRecurringTasks(tasks) {
+
+  // 🆕 WEEK ISOLATION: Calculate week identifier from date
+  calculateWeekIdentifier(dateString) {
+      if (!dateString) {
+        console.warn('⚠️ calculateWeekIdentifier: No dateString provided, using today');
+        dateString = new Date().toISOString().split('T')[0];
+      }
+    const date = new Date(dateString);
+
+    if (isNaN(date.getTime())) {
+      console.warn('⚠️ calculateWeekIdentifier: Invalid date string:', dateString);
+      return new Date().toISOString().split('T')[0]; // Fallback to today
+    }
+    
+    // Get the Monday of this week (start of week)
+    const monday = new Date(date);
+    monday.setDate(date.getDate() - ((date.getDay() + 6) % 7));
+    
+    // Create a unique week identifier: YYYY-MM-DD format of the Monday
+    return monday.toISOString().split('T')[0];
+  }
+
+  // 🆕 WEEK ISOLATION: Get week identifier for a task
+  getTaskWeekIdentifier(task, fallbackDateKey = null) {
+    // Try to get week from task's own context
+    if (task.weekContext) {
+      return task.weekContext;
+    }
+    
+    // Try to calculate from task's date
+    const taskDate = task.dateCreated || fallbackDateKey || new Date().toISOString().split('T')[0];
+    return this.calculateWeekIdentifier(taskDate);
+  }
+
+  // 🆕 WEEK ISOLATION: Get date context for a task
+  getTaskDateContext(task, fallbackDateKey = null) {
+    return task.dateCreated || fallbackDateKey || new Date().toISOString().split('T')[0];
+  }
+
+  // 🔒 ENHANCED: Week-aware deduplication that NEVER crosses week boundaries
+  deduplicateRecurringTasks(tasks, currentDateKey = null) {
     if (!Array.isArray(tasks)) return tasks;
     
-    const seen = new Set();
     const recurringTitles = ['Weekly Planning', 'Friday Reflection', 'Daily Check-in'];
+    const regularTasks = [];
+    const recurringByWeekAndTitle = new Map();
     
-    return tasks.filter(task => {
+    // Group recurring tasks by BOTH week AND title
+    tasks.forEach(task => {
       if (recurringTitles.includes(task.title)) {
-        if (seen.has(task.title)) {
-          debugLog(`🗑️ Removing duplicate recurring task: ${task.title}`);
-          return false; // Skip duplicate
+        const weekId = this.getTaskWeekIdentifier(task, currentDateKey);
+        const key = `${weekId}::${task.title}`; // Week-specific key
+        
+        if (!recurringByWeekAndTitle.has(key)) {
+          recurringByWeekAndTitle.set(key, []);
         }
-        seen.add(task.title);
+        recurringByWeekAndTitle.get(key).push(task);
+        
+        debugLog(`📋 Grouped recurring task: ${task.title} → Week ${weekId}`);
+      } else {
+        regularTasks.push(task);
       }
-      return true; // Keep task
     });
+    
+    // For each week+title group, keep only the best version
+    const bestRecurringTasks = [];
+    recurringByWeekAndTitle.forEach((duplicates, key) => {
+      const [weekId, title] = key.split('::');
+      
+      if (duplicates.length === 1) {
+        bestRecurringTasks.push(duplicates[0]);
+        debugLog(`✅ Single "${title}" for week ${weekId}`);
+      } else {
+        const bestTask = this.findBestRecurringTask(duplicates);
+        bestRecurringTasks.push(bestTask);
+        debugLog(`🔄 Merged ${duplicates.length} versions of "${title}" for week ${weekId}`);
+      }
+    });
+    
+    return [...regularTasks, ...bestRecurringTasks];
   }
+
+  // 🏆 NEW: Find the best version among duplicate recurring tasks
+  findBestRecurringTask(duplicates) {
+    if (duplicates.length === 1) return duplicates[0];
+    
+    // Score each task based on completeness and recency
+    const scoredTasks = duplicates.map(task => {
+      let score = 0;
+      
+      // Points for completed steps
+      const completedSteps = task.steps?.filter(s => s.status === 'complete').length || 0;
+      score += completedSteps * 10;
+      
+      // Points for having reflection
+      if (task.reflection && task.reflection.trim().length > 0) {
+        score += 20;
+      }
+      
+      // Points for being more recent
+      if (task.lastModified) {
+        const age = Date.now() - new Date(task.lastModified).getTime();
+        const daysSinceModified = age / (1000 * 60 * 60 * 24);
+        score += Math.max(0, 10 - daysSinceModified); // Recent modifications get more points
+      }
+      
+      // Points for having more total steps (more detailed task)
+      score += (task.steps?.length || 0) * 2;
+      
+      return { task, score };
+    });
+    
+    // Sort by score and return the best one
+    scoredTasks.sort((a, b) => b.score - a.score);
+    
+    debugLog(`📊 Task scoring for "${duplicates[0].title}":`, 
+      scoredTasks.map(st => ({ 
+        completed: st.task.steps?.filter(s => s.status === 'complete').length || 0,
+        hasReflection: !!(st.task.reflection?.trim()),
+        score: st.score 
+      }))
+    );
+    
+    return scoredTasks[0].task;
+  }
+
+  // 🔒 STRICT: Week-isolated task equality - NEVER merge across weeks
+  tasksAreEqual(task1, task2, dateKey = null) {
+    if (!task1 || !task2) return false;
+    
+    // FIRST: Always check ID match (most reliable)
+    if (task1.id && task2.id) {
+      return task1.id === task2.id;
+    }
+    
+    const recurringTitles = ['Weekly Planning', 'Friday Reflection', 'Daily Check-in'];
+    const isRecurring1 = recurringTitles.includes(task1.title);
+    const isRecurring2 = recurringTitles.includes(task2.title);
+    
+    // 🔒 CRITICAL: For recurring tasks, enforce STRICT week separation
+    if (isRecurring1 && isRecurring2 && task1.title === task2.title) {
+      
+      // Get week identifiers for both tasks
+      const task1Week = this.getTaskWeekIdentifier(task1, dateKey);
+      const task2Week = this.getTaskWeekIdentifier(task2, dateKey);
+      
+      debugLog(`🔍 Comparing recurring tasks:`, {
+        task1: { title: task1.title, week: task1Week, dateCreated: task1.dateCreated },
+        task2: { title: task2.title, week: task2Week, dateCreated: task2.dateCreated }
+      });
+      
+      // 🚫 NEVER merge recurring tasks from different weeks
+      if (task1Week !== task2Week) {
+        debugLog(`🚫 Blocking merge: Different weeks (${task1Week} vs ${task2Week})`);
+        return false;
+      }
+      
+      // 🚫 NEVER merge if date contexts are different
+      const date1 = this.getTaskDateContext(task1, dateKey);
+      const date2 = this.getTaskDateContext(task2, dateKey);
+      
+      if (date1 !== date2) {
+        debugLog(`🚫 Blocking merge: Different dates (${date1} vs ${date2})`);
+        return false;
+      }
+      
+      // Only now consider them equal (same week, same date context)
+      debugLog(`✅ Allowing merge: Same week and date context`);
+      return true;
+    }
+    
+    // For regular tasks, use title and structure match (but still check dates)
+    if (task1.title === task2.title && task1.steps?.length === task2.steps?.length) {
+      // Even regular tasks shouldn't merge if created far apart
+      const date1 = this.getTaskDateContext(task1, dateKey);
+      const date2 = this.getTaskDateContext(task2, dateKey);
+      
+      return date1 === date2;
+    }
+    
+    return false;
+  }
+
+  // 🔄 FIXED: Better merge logic for recurring task versions
+  mergeTaskVersions(localTask, cloudTask) {
+    const localTime = new Date(localTask.lastModified || 0).getTime();
+    const cloudTime = new Date(cloudTask.lastModified || 0).getTime();
+    
+    // For recurring tasks, use more sophisticated merging
+    const recurringTitles = ['Weekly Planning', 'Friday Reflection', 'Daily Check-in'];
+    const isRecurring = recurringTitles.includes(localTask.title);
+    
+    if (isRecurring) {
+      return this.mergeRecurringTasks(localTask, cloudTask);
+    }
+    
+    // For regular tasks, use time-based selection with smart merging
+    const newerTask = cloudTime > localTime ? cloudTask : localTask;
+    const olderTask = cloudTime > localTime ? localTask : cloudTask;
+    
+    // Merge reflection (prefer non-empty)
+    const mergedReflection = newerTask.reflection?.trim() || olderTask.reflection?.trim() || '';
+    
+    // Merge steps - prefer version with more completed steps
+    let mergedSteps = newerTask.steps || [];
+    if (olderTask.steps) {
+      const newerCompleted = newerTask.steps?.filter(s => s.status === 'complete').length || 0;
+      const olderCompleted = olderTask.steps?.filter(s => s.status === 'complete').length || 0;
+      
+      if (olderCompleted > newerCompleted) {
+        mergedSteps = olderTask.steps;
+      }
+    }
+    
+    return {
+      ...newerTask,
+      reflection: mergedReflection,
+      steps: mergedSteps,
+      lastModified: new Date().toISOString()
+    };
+  }
+
+  // 🆕 NEW: Specialized merging for recurring tasks
+  mergeRecurringTasks(localTask, cloudTask) {
+    debugLog(`🔄 Merging recurring task: ${localTask.title}`);
+    
+    // Get completion statistics for both versions
+    const localCompleted = localTask.steps?.filter(s => s.status === 'complete').length || 0;
+    const cloudCompleted = cloudTask.steps?.filter(s => s.status === 'complete').length || 0;
+    const localTotal = localTask.steps?.length || 0;
+    const cloudTotal = cloudTask.steps?.length || 0;
+    
+    // Calculate completion percentages
+    const localProgress = localTotal > 0 ? localCompleted / localTotal : 0;
+    const cloudProgress = cloudTotal > 0 ? cloudCompleted / cloudTotal : 0;
+    
+    debugLog(`📊 Merge comparison - Local: ${localCompleted}/${localTotal} (${Math.round(localProgress * 100)}%), Cloud: ${cloudCompleted}/${cloudTotal} (${Math.round(cloudProgress * 100)}%)`);
+    
+    // Choose base version (prefer more progress, then more recent)
+    let baseTask, otherTask;
+    if (Math.abs(localProgress - cloudProgress) > 0.1) {
+      // Significant progress difference - use the one with more progress
+      if (localProgress > cloudProgress) {
+        baseTask = localTask;
+        otherTask = cloudTask;
+        debugLog(`✅ Using local version (more progress)`);
+      } else {
+        baseTask = cloudTask;
+        otherTask = localTask;
+        debugLog(`✅ Using cloud version (more progress)`);
+      }
+    } else {
+      // Similar progress - use the more recent one
+      const localTime = new Date(localTask.lastModified || 0).getTime();
+      const cloudTime = new Date(cloudTask.lastModified || 0).getTime();
+      
+      if (cloudTime > localTime) {
+        baseTask = cloudTask;
+        otherTask = localTask;
+        debugLog(`✅ Using cloud version (more recent)`);
+      } else {
+        baseTask = localTask;
+        otherTask = cloudTask;
+        debugLog(`✅ Using local version (more recent)`);
+      }
+    }
+    
+    // Merge reflections (prefer non-empty, longer reflection)
+    let mergedReflection = baseTask.reflection || '';
+    if (otherTask.reflection && otherTask.reflection.trim().length > mergedReflection.trim().length) {
+      mergedReflection = otherTask.reflection;
+      debugLog(`📝 Used other version's reflection (longer)`);
+    }
+    
+    // For steps, use the base version but ensure we don't lose any progress
+    let mergedSteps = [...(baseTask.steps || [])];
+    
+    // If other version has more steps, merge them in
+    if (otherTask.steps && otherTask.steps.length > mergedSteps.length) {
+      const additionalSteps = otherTask.steps.slice(mergedSteps.length);
+      mergedSteps.push(...additionalSteps);
+      debugLog(`➕ Added ${additionalSteps.length} additional steps from other version`);
+    }
+    
+    return {
+      ...baseTask,
+      reflection: mergedReflection,
+      steps: mergedSteps,
+      lastModified: new Date().toISOString(),
+      id: baseTask.id || otherTask.id, // Ensure we have an ID
+      // Add merge metadata for debugging
+      _mergeInfo: {
+        mergedAt: new Date().toISOString(),
+        localProgress: `${localCompleted}/${localTotal}`,
+        cloudProgress: `${cloudCompleted}/${cloudTotal}`,
+        chosenVersion: baseTask === localTask ? 'local' : 'cloud'
+      }
+    };
+  }
+
   // 🛡️ SAFE MERGE LOGIC - NEVER LOSES DATA
   safeMerge(localData, cloudData) {
     debugLog('🛡️ SAFE merge - preserving all data...');
@@ -802,14 +1083,11 @@ class HybridStorageManager {
     return this.performCompleteMerge(localData, cloudData);
   }
 
-  // 🔄 COMPLETE MERGE - Preserves all tasks from both sources
+  // 🔒 ENHANCED: Week-aware merge that prevents cross-contamination
   performCompleteMerge(localData, cloudData) {
-    debugLog('🔄 Performing complete merge (preserves all tasks)...');
+    debugLog('🔄 Performing WEEK-ISOLATED merge...');
     
-    // Start with a deep copy of local data
     const mergedData = JSON.parse(JSON.stringify(localData || {}));
-    
-    // Get all unique date keys from both datasets
     const allDateKeys = new Set([
       ...Object.keys(localData || {}),
       ...Object.keys(cloudData || {})
@@ -817,7 +1095,7 @@ class HybridStorageManager {
     
     let tasksAdded = 0;
     let tasksUpdated = 0;
-    let datesProcessed = 0;
+    let crossWeekBlocks = 0;
     
     allDateKeys.forEach(dateKey => {
       // Skip metadata keys
@@ -825,129 +1103,85 @@ class HybridStorageManager {
         return;
       }
       
+      if (!dateKey || typeof dateKey !== 'string' || dateKey.length < 8) {
+        console.warn('⚠️ Skipping invalid dateKey:', dateKey);
+        return;
+      }
+
       const localTasks = localData?.[dateKey] || [];
       const cloudTasks = cloudData?.[dateKey] || [];
       
-      // Ensure both are arrays
       if (!Array.isArray(localTasks) || !Array.isArray(cloudTasks)) {
         mergedData[dateKey] = Array.isArray(localTasks) ? localTasks : 
                              Array.isArray(cloudTasks) ? cloudTasks : [];
         return;
       }
       
-      // Start with local tasks
       const mergedTasks = [...localTasks];
+      const currentWeek = this.calculateWeekIdentifier(dateKey);
       
-      // Add cloud tasks that don't exist locally
       cloudTasks.forEach(cloudTask => {
         if (!cloudTask || typeof cloudTask !== 'object') return;
+        
+        // 🔒 CRITICAL: Verify week context before any merging
+        const cloudTaskWeek = this.getTaskWeekIdentifier(cloudTask, dateKey);
+        
+        if (cloudTaskWeek !== currentWeek) {
+          debugLog(`🚫 BLOCKED: Task "${cloudTask.title}" from week ${cloudTaskWeek} cannot merge into week ${currentWeek}`);
+          crossWeekBlocks++;
+          return; // Skip this task entirely
+        }
         
         const existingIndex = mergedTasks.findIndex(localTask => 
           this.tasksAreEqual(localTask, cloudTask, dateKey)
         );
         
         if (existingIndex === -1) {
-          // Task doesn't exist locally, add it
+          // Ensure the new task has correct week context
           const newTask = {
             ...cloudTask,
-            id: cloudTask.id || `merged_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+            id: cloudTask.id || `merged_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+            dateCreated: dateKey,
+            weekContext: currentWeek
           };
           mergedTasks.push(newTask);
           tasksAdded++;
-          debugLog(`➕ Added cloud task: ${cloudTask.title || 'Untitled'}`);
+          debugLog(`➕ Added cloud task: ${cloudTask.title} for ${dateKey}`);
         } else {
-          // Task exists, merge with newer version
           const mergedTask = this.mergeTaskVersions(mergedTasks[existingIndex], cloudTask);
+          mergedTask.weekContext = currentWeek; // Ensure correct week context
           mergedTasks[existingIndex] = mergedTask;
           tasksUpdated++;
-          debugLog(`🔄 Updated task: ${mergedTask.title || 'Untitled'}`);
+          debugLog(`🔄 Updated task: ${mergedTask.title} for ${dateKey}`);
         }
       });
       
-      mergedData[dateKey] = this.deduplicateRecurringTasks(mergedTasks);
-      datesProcessed++;
+      // Apply week-aware deduplication
+      mergedData[dateKey] = this.deduplicateRecurringTasks(mergedTasks, dateKey);
     });
     
-    const finalTaskCount = this.googleDrive.countTasks(mergedData);
-    
-    debugLog('✅ Complete merge finished', {
-      datesProcessed,
+    debugLog('✅ Week-isolated merge finished', {
       tasksAdded,
       tasksUpdated,
-      originalLocal: this.googleDrive.countTasks(localData),
-      originalCloud: this.googleDrive.countTasks(cloudData),
-      finalTotal: finalTaskCount
+      crossWeekBlocks,
+      weekIsolationActive: true
     });
     
-    // Add merge metadata
     return {
       ...mergedData,
       lastSyncedAt: new Date().toISOString(),
-      syncedFrom: 'merged',
+      syncedFrom: 'week-isolated-merge',
       localTimestamp: Date.now(),
       mergeInfo: {
         localTasks: this.googleDrive.countTasks(localData),
         cloudTasks: this.googleDrive.countTasks(cloudData),
-        finalTasks: finalTaskCount,
+        finalTasks: this.googleDrive.countTasks(mergedData),
         tasksAdded,
         tasksUpdated,
-        mergedAt: new Date().toISOString()
+        crossWeekBlocks,
+        mergedAt: new Date().toISOString(),
+        weekIsolated: true
       }
-    };
-  }
-
-  // 🔍 Check if two tasks are the same
-  tasksAreEqual(task1, task2) {
-    if (!task1 || !task2) return false;
-    
-    // First try ID match (most reliable)
-    if (task1.id && task2.id) {
-      return task1.id === task2.id;
-    }
-    
-    // Enhanced recurring task detection
-    const recurringTasks = ['Weekly Planning', 'Friday Reflection', 'Daily Check-in'];
-    const isRecurring1 = recurringTasks.includes(task1.title);
-    const isRecurring2 = recurringTasks.includes(task2.title);
-    
-    if (isRecurring1 && isRecurring2) {
-      // For recurring tasks, only title match is needed
-      return task1.title === task2.title;
-    }
-    
-    // For regular tasks, use title and structure match
-    return task1.title === task2.title && 
-          task1.steps?.length === task2.steps?.length;
-  }
-
-  // 🔄 Merge two versions of the same task
-  mergeTaskVersions(localTask, cloudTask) {
-    const localTime = new Date(localTask.lastModified || 0).getTime();
-    const cloudTime = new Date(cloudTask.lastModified || 0).getTime();
-    
-    // Use the newer version as base
-    const newerTask = cloudTime > localTime ? cloudTask : localTask;
-    const olderTask = cloudTime > localTime ? localTask : cloudTask;
-    
-    // Merge reflection if one is empty
-    const mergedReflection = newerTask.reflection || olderTask.reflection || '';
-    
-    // Merge steps - prefer more completed steps
-    let mergedSteps = newerTask.steps || [];
-    if (olderTask.steps) {
-      const newerCompleted = newerTask.steps?.filter(s => s.status === 'complete').length || 0;
-      const olderCompleted = olderTask.steps?.filter(s => s.status === 'complete').length || 0;
-      
-      if (olderCompleted > newerCompleted) {
-        mergedSteps = olderTask.steps;
-      }
-    }
-    
-    return {
-      ...newerTask,
-      reflection: mergedReflection,
-      steps: mergedSteps,
-      lastModified: new Date().toISOString()
     };
   }
 
@@ -1179,29 +1413,7 @@ class HybridStorageManager {
       return null;
     }
   }
-  tasksAreEqualForDate(task1, task2, dateKey) {
-    if (!task1 || !task2) return false;
-    
-    // First try ID match (most reliable)
-    if (task1.id && task2.id) {
-      return task1.id === task2.id;
-    }
-    
-    // For recurring tasks, check title AND ensure they're for the same logical date
-    const recurringTasks = ['Weekly Planning', 'Friday Reflection', 'Daily Check-in'];
-    const isRecurring1 = recurringTasks.includes(task1.title);
-    const isRecurring2 = recurringTasks.includes(task2.title);
-    
-    if (isRecurring1 && isRecurring2) {
-      // Same recurring task type AND same date = same task
-      return task1.title === task2.title;
-      // dateKey provides the date context we need
-    }
-    
-    // For regular tasks, use title and structure match
-    return task1.title === task2.title && 
-          task1.steps?.length === task2.steps?.length;
-  }
+
   // Legacy functions
   async exportData() {
     try {
@@ -1246,6 +1458,7 @@ class HybridStorageManager {
       reader.readAsText(file);
     });
   }
+  
   // Add to HybridStorageManager class
   async resetSyncState() {
     debugLog('🔄 Manually resetting sync state...');
@@ -1270,8 +1483,6 @@ class HybridStorageManager {
     
     return false;
   }
-
-
 
 }
 
